@@ -578,8 +578,37 @@ function clearSig(){
   document.getElementById('saveBtn').disabled=true;
 }
 function saveSig(){
-  if(!currentCrew)return;
-  sigs[currentCrew.no]=document.getElementById('sigCanvas').toDataURL('image/png');
+  if(!currentCrew) return;
+  const canvas = document.getElementById('sigCanvas');
+  const dpr    = canvas._dpr || window.devicePixelRatio || 1;
+  const ctx    = canvas.getContext('2d');
+  const pw = canvas.width, ph = canvas.height;
+
+  // サインの描画範囲（物理px）を検出
+  const imgData = ctx.getImageData(0, 0, pw, ph).data;
+  let minX=pw, minY=ph, maxX=0, maxY=0;
+  for(let y=0; y<ph; y++){
+    for(let x=0; x<pw; x++){
+      if(imgData[(y*pw+x)*4+3] > 10){
+        if(x<minX) minX=x; if(x>maxX) maxX=x;
+        if(y<minY) minY=y; if(y>maxY) maxY=y;
+      }
+    }
+  }
+  if(maxX < minX){ minX=0; minY=0; maxX=pw-1; maxY=ph-1; }
+
+  // 余白を追加
+  const m = Math.round(6*dpr);
+  minX=Math.max(0,minX-m); minY=Math.max(0,minY-m);
+  maxX=Math.min(pw-1,maxX+m); maxY=Math.min(ph-1,maxY+m);
+
+  // クロップして別Canvasに書き出し
+  const cropW=maxX-minX+1, cropH=maxY-minY+1;
+  const tmp=document.createElement('canvas');
+  tmp.width=cropW; tmp.height=cropH;
+  tmp.getContext('2d').drawImage(canvas, minX,minY,cropW,cropH, 0,0,cropW,cropH);
+
+  sigs[currentCrew.no]=tmp.toDataURL('image/png');
   closeOverlay(); renderList();
 }
 
