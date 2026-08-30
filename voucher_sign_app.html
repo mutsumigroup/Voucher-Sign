@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Voucher Sign</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#f0f4f8;--surface:#fff;--border:#d1dce8;
+  --navy:#1a3252;--blue:#2563eb;--green:#16a34a;--text:#1e293b;--muted:#64748b;
+}
+html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);}
+
+.header{background:var(--navy);color:#fff;padding:14px 16px 12px;display:flex;align-items:center;gap:10px;}
+.header-icon{font-size:22px;}
+.header-text{flex:1;}
+.header-title{font-size:17px;font-weight:800;letter-spacing:.02em;}
+.header-sub{font-size:12px;color:#94a3b8;margin-top:1px;}
+.header-badge{background:var(--blue);color:#fff;font-size:13px;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap;}
+.header-badge.all-done{background:var(--green);}
+
+.body{padding:16px;display:flex;flex-direction:column;gap:12px;max-width:480px;margin:0 auto;}
+
+.upload-screen{display:flex;flex-direction:column;gap:16px;}
+.upload-box{
+  background:var(--surface);border:2.5px dashed var(--border);border-radius:14px;
+  padding:36px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;
+  cursor:pointer;transition:border-color .2s,background .2s;
+}
+.upload-box:active,.upload-box.drag{border-color:var(--blue);background:#eff6ff;}
+.upload-icon{font-size:48px;line-height:1;}
+.upload-label{font-size:16px;font-weight:800;color:var(--text);}
+.upload-sub{font-size:13px;font-weight:600;color:var(--muted);text-align:center;line-height:1.6;}
+#fileInput{display:none;}
+.upload-note{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:13px;font-weight:500;color:var(--muted);line-height:1.8;}
+.upload-note strong{color:var(--text);}
+
+.processing{display:none;flex-direction:column;align-items:center;gap:16px;padding:40px 20px;}
+.spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.proc-label{font-size:15px;font-weight:700;color:var(--text);}
+
+.app-screen{display:none;flex-direction:column;gap:12px;}
+.info-strip{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:500;color:var(--muted);line-height:1.9;}
+.info-strip strong{color:var(--text);font-weight:800;}
+.sec-label{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:0 2px;}
+.crew-card{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .15s;-webkit-user-select:none;user-select:none;}
+.crew-card:active{opacity:.85;}
+.crew-card.done{border-color:var(--green);background:#f0fdf4;}
+.crew-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0;}
+.crew-card.done .crew-avatar{background:var(--green);}
+.crew-body{flex:1;min-width:0;}
+.crew-name{font-size:15px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.crew-rank{font-size:13px;font-weight:600;color:var(--muted);margin-top:2px;}
+.crew-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
+.crew-sig-thumb{height:30px;width:70px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:4px;}
+.status-chip{font-size:11px;font-weight:800;padding:3px 8px;border-radius:10px;background:#e2e8f0;color:var(--muted);white-space:nowrap;}
+.status-chip.done{background:#dcfce7;color:var(--green);}
+.status-chip.tap{background:#dbeafe;color:var(--blue);}
+.progress-wrap{height:4px;background:#d1dce8;border-radius:4px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:4px;transition:width .4s ease;width:0%;}
+.dl-btn{width:100%;padding:16px;border-radius:12px;border:none;cursor:pointer;font-size:16px;font-weight:900;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:10px;background:#d1dce8;color:#94a3b8;transition:background .2s,color .2s,transform .1s;}
+.dl-btn.ready{background:var(--green);color:#fff;}
+.dl-btn.ready:active{transform:scale(.97);}
+.reset-btn{background:none;border:1.5px solid var(--border);border-radius:10px;padding:10px;width:100%;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
+.reset-btn:active{opacity:.7;}
+
+.sign-overlay{display:none;position:fixed;inset:0;background:#1a3252;z-index:999;flex-direction:column;}
+.sign-overlay.open{display:flex;}
+.sign-preview-area{flex-shrink:0;position:relative;overflow:hidden;background:#f8fafc;height:110px;border-bottom:2px solid var(--blue);}
+.sign-preview-area img{position:absolute;display:block;}
+.sign-row-hl{position:absolute;background:rgba(37,99,235,.12);border:2px solid var(--blue);pointer-events:none;}
+.sign-name-bar{background:#0f2744;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.sign-name-label{flex:1;}
+.sign-person-name{font-size:16px;font-weight:800;color:#93c5fd;}
+.sign-person-rank{font-size:13px;font-weight:600;color:#64748b;margin-top:1px;}
+.sign-tip{font-size:13px;font-weight:600;color:#475569;}
+.sign-canvas-area{flex:1;display:flex;flex-direction:column;padding:12px 14px 20px;gap:10px;min-height:0;}
+.canvas-inner{flex:1;min-height:0;position:relative;border:2px dashed #3b82f6;border-radius:10px;background:#fff;overflow:hidden;touch-action:none;}
+.canvas-inner canvas{display:block;width:100%;height:100%;}
+.canvas-ghost{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94a3b8;font-size:17px;font-weight:700;text-align:center;pointer-events:none;transition:opacity .2s;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.canvas-ghost .ghost-icon{font-size:32px;opacity:.4;}
+.sign-btns{display:flex;gap:10px;flex-shrink:0;}
+.s-btn{flex:1;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:800;cursor:pointer;-webkit-user-select:none;user-select:none;}
+.s-btn:active{opacity:.8;}
+.s-btn-cancel{background:#0f2744;color:#64748b;}
+.s-btn-clear{background:#1e3a5f;color:#94a3b8;}
+.s-btn-save{background:var(--blue);color:#fff;}
+.s-btn-save:disabled{background:#1e3a5f;color:#475569;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">&#9875;</div>
+  <div class="header-text">
+    <div class="header-title">Voucher Sign</div>
+    <div class="header-sub" id="headerSub">PDFをアップロードしてください</div>
+  </div>
+  <div class="header-badge" id="headerBadge" style="display:none;">0 / 0</div>
+</div>
+
+<div class="body">
+  <div class="upload-screen" id="uploadScreen">
+    <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
+      <div class="upload-icon">📄</div>
+      <div class="upload-label">PDFをタップして選択</div>
+      <div class="upload-sub">VoucherのPDFファイルを<br>ここにアップロード</div>
+      <input type="file" id="fileInput" accept="application/pdf">
+    </div>
+    <div class="upload-note">
+      <strong>Sign列を自動検出します</strong><br>
+      PDFを読み込むと、表のSign列にある空白セルを自動で検出し、各クルーのサイン欄を表示します。
+    </div>
+  </div>
+
+  <div class="processing" id="processingScreen">
+    <div class="spinner"></div>
+    <div class="proc-label" id="procLabel">PDFを解析中...</div>
+  </div>
+
+  <div class="app-screen" id="appScreen">
+    <div class="info-strip" id="infoStrip"></div>
+    <div class="sec-label">クルー — タップしてサイン</div>
+    <div id="crewList"></div>
+    <div class="progress-wrap"><div class="progress-fill" id="progFill"></div></div>
+    <button class="dl-btn" id="dlBtn" disabled onclick="downloadPDF()">
+      <span>📄</span><span id="dlBtnText">サインを集めてください</span>
+    </button>
+    <button class="reset-btn" onclick="resetApp()">&#8635; 別のPDFを読み込む</button>
+  </div>
+</div>
+
+<div class="sign-overlay" id="signOverlay">
+  <div class="sign-preview-area" id="previewArea">
+    <img id="previewImg" src="" alt="">
+    <div class="sign-row-hl" id="rowHl"></div>
+  </div>
+  <div class="sign-name-bar">
+    <div class="sign-name-label">
+      <div class="sign-person-name" id="overlayName">—</div>
+      <div class="sign-person-rank" id="overlayRank">—</div>
+    </div>
+    <div class="sign-tip">✍ 下にサインしてください</div>
+  </div>
+  <div class="sign-canvas-area">
+    <div class="canvas-inner" id="canvasInner">
+      <canvas id="sigCanvas"></canvas>
+      <div class="canvas-ghost" id="canvasGhost">
+        <span class="ghost-icon">✍</span><span>ここにサイン</span>
+      </div>
+    </div>
+    <div class="sign-btns">
+      <button class="s-btn s-btn-cancel" onclick="closeOverlay()">キャンセル</button>
+      <button class="s-btn s-btn-clear" onclick="clearSig()">クリア</button>
+      <button class="s-btn s-btn-save" id="saveBtn" onclick="saveSig()" disabled>保存する</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let pdfBytes=null, pageImg=null, crewData=[], sigs={}, currentCrew=null;
+let drawing=false, lastX=0, lastY=0, lastW=3.0, lastVel=0;
+let strokePoints=[];   // 一筆分の点 [{x,y}]
+let allStrokes=[];     // 完了したストローク全て（再描画用）
+let pdfPageW=0, pdfPageH=0; // PDF実際のポイントサイズ
+
+/* ── UPLOAD ── */
+document.getElementById('fileInput').addEventListener('change', e=>{
+  if(e.target.files[0]) loadPDF(e.target.files[0]);
+});
+const uploadBox=document.getElementById('uploadBox');
+uploadBox.addEventListener('dragover', e=>{ e.preventDefault(); uploadBox.classList.add('drag'); });
+uploadBox.addEventListener('dragleave', ()=>uploadBox.classList.remove('drag'));
+uploadBox.addEventListener('drop', e=>{
+  e.preventDefault(); uploadBox.classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f && f.type==='application/pdf') loadPDF(f);
+});
+
+async function loadPDF(file){
+  showScreen('processing');
+  setProc('PDFを読み込み中...');
+  try{
+    const ab=await file.arrayBuffer();
+    pdfBytes=new Uint8Array(ab);
+
+    setProc('ページをレンダリング中...');
+    const pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
+    const page=await pdfjsDoc.getPage(1);
+
+    // ページ実サイズ（ポイント単位）を記録
+    const vp1=page.getViewport({scale:1});
+    pdfPageW=vp1.width;
+    pdfPageH=vp1.height;
+
+    // プレビュー用画像を生成（2.5倍）
+    const scale=2.5;
+    const vp=page.getViewport({scale});
+    const cvs=document.createElement('canvas');
+    cvs.width=vp.width; cvs.height=vp.height;
+    await page.render({canvasContext:cvs.getContext('2d'),viewport:vp}).promise;
+    pageImg=cvs.toDataURL('image/png');
+    // プレビュー画像の実ピクセルサイズを保存（正規化用）
+    const imgW=vp.width, imgH=vp.height;
+
+    setProc('Sign列を検出中...');
+    const content=await page.getTextContent();
+
+    // ── テキストアイテムを正規化 ──
+    // pdf.jsのgetViewport({scale:1})のtransformを使って
+    // 座標を「左上原点・ポイント単位」に変換する
+    const items=[];
+    for(const it of content.items){
+      if(!it.str || !it.str.trim()) continue;
+      // it.transform = [scaleX, skewX, skewY, scaleY, tx, ty]
+      // ty は PDF座標系（左下原点）
+      const tx=it.transform[4];
+      const ty=it.transform[5];
+      const w=Math.abs(it.width);
+      const h=Math.abs(it.height)||10;
+      items.push({
+        str: it.str.trim(),
+        x:   tx,
+        y:   pdfPageH - ty,   // 左上原点に変換
+        w:   w,
+        h:   h
+      });
+    }
+
+    // ── "Sign" ヘッダーを探す ──
+    const signHdr=items.find(it=>/^sign$/i.test(it.str));
+    if(!signHdr) throw new Error('"Sign" 列ヘッダーが見つかりません。\nPDFに "Sign" という列ヘッダーがあるか確認してください。');
+
+    const signHdrY=signHdr.y;
+
+    // ── Nationality ヘッダーの右端をSign列左端として使う ──
+    // Sign文字だけでなくNationality列右端〜ページ右端全体をSign列とみなす
+    const natHdr=items.find(it=>/^nationality$/i.test(it.str) && Math.abs(it.y-signHdrY)<20);
+    // Nationality列データ（FILIPINO等）の右端を各行から取得
+    const natDataRights=items
+      .filter(it=> natHdr && it.y>signHdrY+5 && it.x>=natHdr.x-10 && it.x<signHdr.x)
+      .map(it=>it.x+it.w);
+    const natRightX = natDataRights.length>0
+      ? Math.max(...natDataRights)
+      : (natHdr ? natHdr.x+natHdr.w : signHdr.x);
+    // Sign列左端 = Nationality右端 + 余白、右端 = ページ右端
+    const signColLeftX = natRightX + 8;
+    const signColRightX = pdfPageW - 8;
+
+    const signColX=signHdr.x; // 名前フィルタ用（Sign文字のX）
+
+    // ── "No" ヘッダーを探す（緩い条件）──
+    const noHdr=items.find(it=>/^no$/i.test(it.str) && Math.abs(it.y-signHdrY)<20);
+
+    // ── 行番号を探す ──
+    // ヘッダー行より下にある 1桁〜2桁の数字
+    // X座標はNoヘッダーのX ±80pt 以内（緩めに）
+    const noX=noHdr ? noHdr.x : 80;
+    const tableStartY=signHdrY + 5; // ヘッダーより少し下
+
+    const numItems=items.filter(it=>{
+      if(!/^\d{1,2}$/.test(it.str)) return false;
+      if(it.y < tableStartY) return false;
+      if(Math.abs(it.x - noX) > 100) return false;
+      return true;
+    }).sort((a,b)=>a.y-b.y);
+
+    if(numItems.length===0){
+      // フォールバック：数字が見つからない場合、
+      // ヘッダー行の下に均等な行があると仮定
+      throw new Error('クルーの行番号が見つかりません。\nPDFの表に No列（1, 2, 3...）があるか確認してください。');
+    }
+
+    // ── 名前列・Rank列を探す ──
+    const nameHdr=items.find(it=>/^name$/i.test(it.str) && Math.abs(it.y-signHdrY)<20);
+    const rankHdr=items.find(it=>/^rank$/i.test(it.str) && Math.abs(it.y-signHdrY)<20);
+    const nameX=nameHdr ? nameHdr.x : (noX+80);
+    const rankX=rankHdr ? rankHdr.x : (noX+25);
+
+    // ── 各行のデータを組み立て ──
+    crewData=[];
+    for(let i=0;i<numItems.length;i++){
+      const ni=numItems[i];
+      const rowCY=ni.y; // この行の中心Y（近似）
+
+      // 同じ行のテキスト：Y±18pt以内
+      const rowItems=items.filter(it=>
+        it.y>=rowCY-18 && it.y<=rowCY+18
+      );
+
+      // 名前：nameX以降、signColX未満
+      const nameItems=rowItems
+        .filter(it=>it.x>=nameX-10 && it.x<signColX-5)
+        .sort((a,b)=>a.x-b.x);
+      const name=nameItems.map(it=>it.str).join(' ')||`Crew ${ni.str}`;
+
+      // Rank：rankX付近
+      const rankItems=rowItems
+        .filter(it=>it.x>=rankX-5 && it.x<nameX-5)
+        .sort((a,b)=>a.x-b.x);
+      const rank=rankItems.map(it=>it.str).join(' ')||'';
+
+      // 行の境界Y（上端・下端）を決定
+      const prevRowCY = i===0 ? signHdrY : numItems[i-1].y;
+      const nextRowCY = i===numItems.length-1 ? rowCY+40 : numItems[i+1].y;
+      const rowTop    = rowCY - (rowCY - prevRowCY)*0.65;
+      const rowBot    = rowCY + (nextRowCY - rowCY)*0.35;
+
+      // Sign列のX範囲：
+      // Signヘッダー文字の中心を軸に、列幅の約90%をサイン幅とする
+      const signHdrCX = signHdr.x + signHdr.w / 2; // Signヘッダー中心X
+      const colW      = signColRightX - signColLeftX;
+      const halfW     = colW * 0.45;
+      const sigX0     = signHdrCX - halfW;
+      const sigX1     = signHdrCX + halfW;
+
+      crewData.push({
+        no:    parseInt(ni.str),
+        name:  name,
+        rank:  rank,
+        // PDF座標（左上原点・ポイント）
+        pdfX:  sigX0,
+        pdfY:  rowTop,
+        pdfW:  sigX1 - sigX0,
+        pdfH:  rowBot - rowTop,
+        // 正規化（0〜1、左上原点）
+        rowY:  rowTop  / pdfPageH,
+        rowH:  (rowBot - rowTop) / pdfPageH,
+        sigXS: sigX0 / pdfPageW,
+        sigXE: sigX1 / pdfPageW,
+      });
+    }
+
+    sigs={};
+    document.getElementById('infoStrip').innerHTML=
+      `<strong>ファイル:</strong> ${escHtml(file.name)}<br>`+
+      `<strong>クルー数:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
+      `<strong>Sign列:</strong> 自動検出済み`;
+    document.getElementById('headerSub').textContent=file.name.replace(/\.pdf$/i,'');
+    renderList();
+    showScreen('app');
+
+  }catch(err){
+    alert('PDFの読み込みに失敗しました。\n\n'+err.message);
+    showScreen('upload');
+  }
+}
+
+function showScreen(n){
+  document.getElementById('uploadScreen').style.display    = n==='upload'     ?'flex':'none';
+  document.getElementById('processingScreen').style.display= n==='processing' ?'flex':'none';
+  document.getElementById('appScreen').style.display       = n==='app'        ?'flex':'none';
+  document.getElementById('headerBadge').style.display     = n==='app'        ?''   :'none';
+}
+function setProc(m){document.getElementById('procLabel').textContent=m;}
+
+function resetApp(){
+  if(!confirm('別のPDFを読み込みますか？\n現在のサインはリセットされます。'))return;
+  pdfBytes=null; pageImg=null; crewData=[]; sigs={};
+  document.getElementById('fileInput').value='';
+  showScreen('upload');
+}
+
+/* ── CREW LIST ── */
+function renderList(){
+  const list=document.getElementById('crewList');
+  list.innerHTML='';
+  const done=Object.keys(sigs).length, total=crewData.length;
+  crewData.forEach(c=>{
+    const d=!!sigs[c.no];
+    const div=document.createElement('div');
+    div.className='crew-card'+(d?' done':'');
+    div.onclick=()=>openOverlay(c.no);
+    div.innerHTML=`
+      <div class="crew-avatar">${c.no}</div>
+      <div class="crew-body">
+        <div class="crew-name">${escHtml(c.name)}</div>
+        <div class="crew-rank">${escHtml(c.rank)||'&nbsp;'}</div>
+      </div>
+      <div class="crew-right">
+        ${d?`<img class="crew-sig-thumb" src="${sigs[c.no]}" alt="sign">`:''}
+        <span class="status-chip ${d?'done':'tap'}">${d?'✓ 完了':'タップ'}</span>
+      </div>`;
+    list.appendChild(div);
+  });
+  document.getElementById('headerBadge').textContent=done+' / '+total;
+  document.getElementById('headerBadge').className='header-badge'+(done===total&&total>0?' all-done':'');
+  document.getElementById('progFill').style.width=(total>0?done/total*100:0)+'%';
+  const dlBtn=document.getElementById('dlBtn'),dlTxt=document.getElementById('dlBtnText');
+  if(done===total&&total>0){
+    dlBtn.disabled=false; dlBtn.className='dl-btn ready';
+    dlTxt.textContent='サイン済みPDFをダウンロード';
+  }else{
+    dlBtn.disabled=true; dlBtn.className='dl-btn';
+    dlTxt.textContent=`あと${total-done}人のサインが必要です`;
+  }
+}
+
+/* ── OVERLAY ── */
+function openOverlay(no){
+  currentCrew=crewData.find(c=>c.no===no);
+  if(!currentCrew)return;
+  document.getElementById('overlayName').textContent=currentCrew.name;
+  document.getElementById('overlayRank').textContent=(currentCrew.rank||'—')+' · No.'+currentCrew.no;
+  document.getElementById('previewImg').src=pageImg;
+  document.getElementById('signOverlay').classList.add('open');
+  updatePreview();
+  allStrokes=[]; strokePoints=[];
+  resizeCanvas(); clearSig();
+  if(sigs[no]){
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.getElementById('sigCanvas');
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      document.getElementById('canvasGhost').style.opacity='0';
+      document.getElementById('saveBtn').disabled=false;
+    };
+    img.src=sigs[no];
+  }
+  document.body.style.overflow='hidden';
+}
+function closeOverlay(){
+  document.getElementById('signOverlay').classList.remove('open');
+  document.body.style.overflow='';
+  currentCrew=null;
+}
+function updatePreview(){
+  if(!currentCrew)return;
+  const area=document.getElementById('previewArea');
+  const img=document.getElementById('previewImg');
+  const hl=document.getElementById('rowHl');
+  const ZOOM=4.0, H_AREA=110;
+  // プレビュー画像のアスペクト比 = pdfPageH/pdfPageW（scale同じなので）
+  const ASPECT=pdfPageH/pdfPageW;
+  const cx=(currentCrew.sigXS+currentCrew.sigXE)/2; // Sign列中心X（正規化）
+  const cy=currentCrew.rowY+currentCrew.rowH/2;
+  const W_AREA=area.getBoundingClientRect().width||360;
+  const imgW=W_AREA*ZOOM, imgH=imgW*ASPECT;
+  const left=W_AREA/2-cx*imgW, top=H_AREA/2-cy*imgH;
+  img.style.cssText=`width:${imgW}px;height:${imgH}px;left:${left}px;top:${top}px;`;
+  hl.style.cssText=`left:${currentCrew.sigXS*imgW+left}px;top:${currentCrew.rowY*imgH+top}px;width:${(currentCrew.sigXE-currentCrew.sigXS)*imgW}px;height:${currentCrew.rowH*imgH}px;`;
+}
+window.addEventListener('resize',updatePreview);
+
+/* ── CANVAS ── */
+function setupCanvas(){
+  const c=document.getElementById('sigCanvas');
+  c.addEventListener('touchstart',ts,{passive:false});
+  c.addEventListener('touchmove', tm,{passive:false});
+  c.addEventListener('touchend',  te,{passive:false});
+  c.addEventListener('mousedown', md);
+  c.addEventListener('mousemove', mm);
+  c.addEventListener('mouseup',   mu);
+  c.addEventListener('mouseleave',mu);
+}
+setupCanvas();
+function resizeCanvas(){
+  const inner=document.getElementById('canvasInner');
+  const c=document.getElementById('sigCanvas');
+  const r=inner.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1;
+  c.width=r.width*dpr; c.height=r.height*dpr;
+  // scale()は座標系をCSSpxに合わせるが、lineWidthもCSSpx単位になる
+  // → lineWidthをdpr倍にしなくてよい代わり、getXY()の座標はCSSpxのまま使える
+  c.getContext('2d').scale(dpr,dpr);
+  // DPRを保存してdrawSmoothで参照
+  c._dpr=dpr;
+}
+function getXY(e,c){
+  const r=c.getBoundingClientRect(), s=e.touches?e.touches[0]:e;
+  return{x:s.clientX-r.left, y:s.clientY-r.top};
+}
+function beginStroke(p){
+  drawing=true;
+  strokePoints=[{x:p.x, y:p.y}];
+  document.getElementById('canvasGhost').style.opacity='0';
+  document.getElementById('saveBtn').disabled=false;
+}
+function stroke(p){
+  if(!drawing) return;
+  strokePoints.push({x:p.x, y:p.y});
+  // 現在のストロークをキャンバス全体に再描画
+  redrawAll();
+}
+function endStroke(){
+  if(!drawing) return;
+  drawing=false;
+  if(strokePoints.length > 0){
+    allStrokes.push(strokePoints.slice());
+    strokePoints=[];
+  }
+}
+
+// 全ストロークを一から滑らかに描き直す
+function redrawAll(){
+  const canvas=document.getElementById('sigCanvas');
+  // getContext は毎回同じインスタンスを返すが、
+  // resizeCanvas で width/height を再設定すると変換行列がリセットされる。
+  // ここでは width/height は変えないので変換行列は維持されている。
+  const ctx=canvas.getContext('2d');
+  const dpr=canvas._dpr||window.devicePixelRatio||1;
+  // clearRect はCSSpx座標系で（scale済みなので）
+  ctx.clearRect(0, 0, canvas.width/dpr, canvas.height/dpr);
+
+  for(const pts of allStrokes) drawSmooth(ctx, pts, dpr);
+  if(strokePoints.length>0) drawSmooth(ctx, strokePoints, dpr);
+}
+
+// Catmull-Rom スプラインで滑らかに描く
+function drawSmooth(ctx, pts, dpr){
+  if(pts.length===0) return;
+  dpr = dpr || canvas._dpr || window.devicePixelRatio || 1;
+
+  // lineWidth はCSSpx単位。ctx.scale(dpr,dpr)済みなので
+  // lineWidth=N → 画面上 N×dpr 物理ピクセル幅になる。
+  // スマホ(dpr=3)でボールペン相当の太さ: 目標5物理px → lineWidth=5/3≈1.7
+  // → ここでは「見た目の太さ」をCSSpxで指定する
+  // ★ 問題: ctx.scale後もlineWidthはCSSpxで解釈されるため
+  //   lineWidth=4.5 → 4.5CSSpx = 4.5×dpr物理px（十分太い）のはず
+  //   しかし実機で細く見える場合、dprが正しく反映されていない可能性
+  // → 安全策: lineWidthをdprに関係なく物理px換算で設定
+  const LINE_PHYSICAL_PX = 20; // 物理ピクセル数（太さ）
+  ctx.lineWidth   = LINE_PHYSICAL_PX / dpr; // CSSpxに変換
+  ctx.strokeStyle = '#000000';
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.globalAlpha = 1.0;
+
+  if(pts.length===1){
+    ctx.beginPath();
+    ctx.arc(pts[0].x, pts[0].y, (LINE_PHYSICAL_PX/2)/dpr, 0, Math.PI*2);
+    ctx.fillStyle='#000000';
+    ctx.fill();
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+
+  if(pts.length===2){
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.stroke();
+    return;
+  }
+
+  // Catmull-Rom → Bézier 変換
+  for(let i=0; i<pts.length-1; i++){
+    const p0=pts[Math.max(i-1,0)];
+    const p1=pts[i];
+    const p2=pts[i+1];
+    const p3=pts[Math.min(i+2,pts.length-1)];
+    const cp1x=p1.x+(p2.x-p0.x)/6, cp1y=p1.y+(p2.y-p0.y)/6;
+    const cp2x=p2.x-(p3.x-p1.x)/6, cp2y=p2.y-(p3.y-p1.y)/6;
+    ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,p2.x,p2.y);
+  }
+  ctx.stroke();
+}
+
+function ts(e){e.preventDefault();beginStroke(getXY(e,e.target));}
+function tm(e){e.preventDefault();stroke(getXY(e,e.target));}
+function te(e){e.preventDefault();endStroke();}
+function md(e){beginStroke(getXY(e,e.target));}
+function mm(e){stroke(getXY(e,e.target));}
+function mu(){endStroke();}
+function clearSig(){
+  allStrokes=[];
+  strokePoints=[];
+  const c=document.getElementById('sigCanvas');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+  document.getElementById('canvasGhost').style.opacity='1';
+  document.getElementById('saveBtn').disabled=true;
+}
+function saveSig(){
+  if(!currentCrew)return;
+  sigs[currentCrew.no]=document.getElementById('sigCanvas').toDataURL('image/png');
+  closeOverlay(); renderList();
+}
+
+/* ── DOWNLOAD ── */
+async function downloadPDF(){
+  const btn=document.getElementById('dlBtn'),txt=document.getElementById('dlBtnText');
+  btn.disabled=true; txt.textContent='生成中...';
+  try{
+    const doc=await PDFLib.PDFDocument.load(pdfBytes);
+    const page=doc.getPages()[0];
+    const {width:W,height:H}=page.getSize();
+    for(const crew of crewData){
+      if(!sigs[crew.no])continue;
+      const png=await doc.embedPng(b64ToU8(sigs[crew.no].split(',')[1]));
+      const pad=1;
+      const cellW=crew.pdfW - pad*2;
+      const cellH=crew.pdfH - pad*2;
+
+      // サイン画像のアスペクト比を保ちつつセル中央に配置
+      const pngDims=png.scale(1);
+      const scaleX=cellW/pngDims.width;
+      const scaleY=cellH/pngDims.height;
+      const sc=Math.min(scaleX, scaleY);
+      const drawW=pngDims.width*sc;
+      const drawH=pngDims.height*sc;
+      // セル内で中央揃え
+      const offX=(cellW-drawW)/2;
+      const offY=(cellH-drawH)/2;
+
+      page.drawImage(png,{
+        x:     crew.pdfX + pad + offX,
+        y:     H - crew.pdfY - crew.pdfH + pad + offY,
+        width: drawW,
+        height:drawH
+      });
+    }
+    const out=await doc.save();
+    const blob=new Blob([out],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='signed_voucher.pdf'; a.click();
+    URL.revokeObjectURL(url);
+    txt.textContent='ダウンロード完了 ✓';
+    setTimeout(()=>{ txt.textContent='サイン済みPDFをダウンロード'; btn.disabled=false; },3000);
+  }catch(err){
+    console.error(err);
+    txt.textContent='エラーが発生しました'; btn.disabled=false;
+  }
+}
+
+function b64ToU8(s){
+  const b=atob(s),u=new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);
+  return u;
+}
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+showScreen('upload');
+</script>
+</body>
+</html>
