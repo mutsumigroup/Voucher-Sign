@@ -66,7 +66,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .reset-btn{background:none;border:1.5px solid var(--border);border-radius:10px;padding:10px;width:100%;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
 .reset-btn:active{opacity:.7;}
 
-.sign-overlay{display:none;position:fixed;inset:0;background:#1a3252;z-index:999;flex-direction:column;}
+.sign-overlay{display:none;position:fixed;inset:0;background:#1a3252;z-index:999;flex-direction:column;overflow:hidden;}
 .sign-overlay.open{display:flex;}
 .sign-preview-area{flex-shrink:0;position:relative;overflow:hidden;background:#f8fafc;height:110px;border-bottom:2px solid var(--blue);}
 .sign-preview-area img{position:absolute;display:block;}
@@ -76,12 +76,12 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .sign-person-name{font-size:16px;font-weight:800;color:#93c5fd;}
 .sign-person-rank{font-size:13px;font-weight:600;color:#64748b;margin-top:1px;}
 .sign-tip{font-size:13px;font-weight:600;color:#475569;}
-.sign-canvas-area{flex:1;display:flex;flex-direction:column;padding:12px 14px 20px;gap:10px;min-height:0;}
-.canvas-inner{flex:1;min-height:0;position:relative;border:2px dashed #3b82f6;border-radius:10px;background:#fff;overflow:hidden;touch-action:none;}
+.sign-canvas-area{flex:1;display:flex;flex-direction:column;padding:12px 14px 16px;gap:10px;min-height:0;max-height:calc(100vh - 280px);}
+.canvas-inner{flex:1;min-height:120px;max-height:340px;position:relative;border:2px dashed #3b82f6;border-radius:10px;background:#fff;overflow:hidden;touch-action:none;}
 .canvas-inner canvas{display:block;width:100%;height:100%;}
 .canvas-ghost{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94a3b8;font-size:17px;font-weight:700;text-align:center;pointer-events:none;transition:opacity .2s;display:flex;flex-direction:column;align-items:center;gap:6px;}
 .canvas-ghost .ghost-icon{font-size:32px;opacity:.4;}
-.sign-btns{display:flex;gap:10px;flex-shrink:0;}
+.sign-btns{display:flex;gap:10px;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0px);}
 .s-btn{flex:1;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:800;cursor:pointer;-webkit-user-select:none;user-select:none;}
 .s-btn:active{opacity:.8;}
 .s-btn-cancel{background:#0f2744;color:#64748b;}
