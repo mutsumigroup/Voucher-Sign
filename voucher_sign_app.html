@@ -341,8 +341,8 @@ async function loadPDF(file){
       // 行の境界Y（上端・下端）を決定
       const prevRowCY = i===0 ? signHdrY : numItems[i-1].y;
       const nextRowCY = i===numItems.length-1 ? rowCY+40 : numItems[i+1].y;
-      const rowTop    = rowCY - (rowCY - prevRowCY)*0.80;
-      const rowBot    = rowCY + (nextRowCY - rowCY)*0.20;
+      const rowTop    = rowCY - (rowCY - prevRowCY)*0.65;
+      const rowBot    = rowCY + (nextRowCY - rowCY)*0.35;
 
       // Sign列のX範囲：
       // Signヘッダー文字の中心を軸に、列幅の約90%をサイン幅とする
