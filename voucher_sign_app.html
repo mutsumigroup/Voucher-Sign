@@ -65,6 +65,26 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .dl-btn.ready:active{transform:scale(.97);}
 .reset-btn{background:none;border:1.5px solid var(--border);border-radius:10px;padding:10px;width:100%;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
 .reset-btn:active{opacity:.7;}
+.version-card{background:var(--surface-2,#fff);border:0.5px solid var(--border,#d1dce8);border-radius:10px;overflow:hidden;margin-top:4px;}
+.version-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;}
+.version-header-left{display:flex;align-items:center;gap:8px;}
+.version-title{font-size:12px;font-weight:700;color:#64748b;}
+.version-current{font-size:11px;font-weight:600;background:#dbeafe;color:#1d4ed8;padding:2px 7px;border-radius:8px;}
+.version-arrow{font-size:11px;color:#94a3b8;transition:transform .2s;}
+.version-arrow.open{transform:rotate(180deg);}
+.version-body{display:none;border-top:0.5px solid #d1dce8;}
+.version-body.open{display:block;}
+.version-item{padding:10px 14px;border-bottom:0.5px solid #f1f5f9;}
+.version-item:last-child{border-bottom:none;}
+.version-item-header{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.ver-num{font-size:11px;font-weight:700;color:#1e293b;}
+.ver-date{font-size:10px;color:#94a3b8;}
+.ver-tag{font-size:10px;font-weight:600;padding:1px 6px;border-radius:6px;}
+.ver-tag.new{background:#dcfce7;color:#15803d;}
+.ver-tag.fix{background:#fef3c7;color:#92400e;}
+.ver-changes{list-style:none;padding:0;margin:0;}
+.ver-changes li{font-size:11px;color:#475569;padding:2px 0;padding-left:12px;position:relative;}
+.ver-changes li::before{content:'·';position:absolute;left:3px;color:#94a3b8;}
 
 .sign-overlay{display:none;position:fixed;inset:0;background:#1a3252;z-index:999;flex-direction:column;overflow:hidden;}
 .sign-overlay.open{display:flex;}
@@ -112,6 +132,68 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <div class="upload-note">
       <strong>Sign列を自動検出します</strong><br>
       PDFを読み込むと、表のSign列にある空白セルを自動で検出し、各クルーのサイン欄を表示します。
+    </div>
+
+    <!-- バージョン履歴 -->
+    <div class="version-card">
+      <div class="version-header" onclick="toggleVersion()">
+        <div class="version-header-left">
+          <span class="version-title">&#128221; バージョン履歴</span>
+          <span class="version-current">v1.8</span>
+        </div>
+        <span class="version-arrow" id="versionArrow">&#9660;</span>
+      </div>
+      <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v1.8</span>
+            <span class="ver-date">2026/09/04</span>
+            <span class="ver-tag fix">改善</span>
+          </div>
+          <ul class="ver-changes">
+            <li>1文字ずつ分割されたPDFのSign列検出に対応（SELENE LEADER等）</li>
+            <li>サインボタンが画面外に隠れる問題を修正</li>
+            <li>PDF書き込み位置を上に調整</li>
+            <li>バージョン履歴を追加</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v1.7</span>
+            <span class="ver-date">2026/08/30</span>
+            <span class="ver-tag fix">改善</span>
+          </div>
+          <ul class="ver-changes">
+            <li>サイン保存時にキャンバス全体ではなく描画範囲のみをクロップしてPDFに貼付</li>
+            <li>Sign列の位置をNationality列右端を基準に自動計算</li>
+            <li>PDF書き込み時にサインをSign列中央に配置</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v1.6</span>
+            <span class="ver-date">2026/08/30</span>
+            <span class="ver-tag fix">改善</span>
+          </div>
+          <ul class="ver-changes">
+            <li>サインの線をCatmull-Romスプラインで滑らかに描画</li>
+            <li>デバイスの解像度（DPR）に応じた線幅の自動調整</li>
+            <li>ボールペンらしい自然な線質を実現</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v1.5</span>
+            <span class="ver-date">2026/08/30</span>
+            <span class="ver-tag new">新機能</span>
+          </div>
+          <ul class="ver-changes">
+            <li>PDFアップロード機能を追加（毎回PDFを選択可能に）</li>
+            <li>Sign列・クルー行を自動検出するアルゴリズムを実装</li>
+            <li>スマホ全画面サインオーバーレイを追加</li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -381,6 +463,13 @@ async function loadPDF(file){
   }catch(err){
     alert('PDFの読み込みに失敗しました。\n\n'+err.message);
     showScreen('upload');
+
+function toggleVersion(){
+  const body=document.getElementById('versionBody');
+  const arrow=document.getElementById('versionArrow');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
   }
 }
 
@@ -397,6 +486,13 @@ function resetApp(){
   pdfBytes=null; pageImg=null; crewData=[]; sigs={};
   document.getElementById('fileInput').value='';
   showScreen('upload');
+
+function toggleVersion(){
+  const body=document.getElementById('versionBody');
+  const arrow=document.getElementById('versionArrow');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
 }
 
 /* ── CREW LIST ── */
@@ -700,6 +796,13 @@ function escHtml(s){
 }
 
 showScreen('upload');
+
+function toggleVersion(){
+  const body=document.getElementById('versionBody');
+  const arrow=document.getElementById('versionArrow');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
 </script>
 </body>
 </html>
