@@ -219,56 +219,67 @@ async function loadPDF(file){
     const items=[];
     for(const it of content.items){
       if(!it.str || !it.str.trim()) continue;
-      // it.transform = [scaleX, skewX, skewY, scaleY, tx, ty]
-      // ty は PDF座標系（左下原点）
       const tx=it.transform[4];
       const ty=it.transform[5];
       const w=Math.abs(it.width);
       const h=Math.abs(it.height)||10;
+      // pdf.jsは複数行や複数単語を1アイテムにまとめることがある
+      // → 改行・タブで分割し、最初の意味ある部分だけを使う
+      const rawStr = it.str.trim();
+      // 改行・タブ・スペース連続を区切りとして最初のトークンを取得
+      const firstToken = rawStr.split(/[
+	]+/)[0].trim();
       items.push({
-        str: it.str.trim(),
+        str: firstToken,
+        raw: rawStr,
         x:   tx,
-        y:   pdfPageH - ty,   // 左上原点に変換
+        y:   pdfPageH - ty,
         w:   w,
         h:   h
       });
     }
 
     // ── "Sign" ヘッダーを探す ──
-    const signHdr=items.find(it=>/^sign$/i.test(it.str));
+    // pdf.jsが "Nationality Sign\n< Important..." のように結合する場合があるため
+    // str(最初のトークン) と raw(全体) の両方を検索
+    const signHdr=items.find(it=>/^sign$/i.test(it.str))
+      || items.find(it=>/sign/i.test(it.str) && it.w < 50 && it.str.length < 10)
+      || items.find(it=>/^sign/i.test(it.raw));
     if(!signHdr) throw new Error('"Sign" 列ヘッダーが見つかりません。\nPDFに "Sign" という列ヘッダーがあるか確認してください。');
 
     const signHdrY=signHdr.y;
 
-    // ── Nationality ヘッダーの右端をSign列左端として使う ──
-    // Sign文字だけでなくNationality列右端〜ページ右端全体をSign列とみなす
-    const natHdr=items.find(it=>/^nationality$/i.test(it.str) && Math.abs(it.y-signHdrY)<20);
-    // Nationality列データ（FILIPINO等）の右端を各行から取得
+    // ── Nationality ヘッダーを部分一致で探す（フォント分割対策）──
+    const natHdr=items.find(it=>/^nationality/i.test(it.str) && Math.abs(it.y-signHdrY)<20)
+      || items.find(it=>/nation/i.test(it.str) && Math.abs(it.y-signHdrY)<20)
+      || items.find(it=>/nation/i.test(it.raw) && Math.abs(it.y-signHdrY)<20);
+
+    // ── Nationality列データ（FILIPINO等）の右端を取得 ──
+    // Signヘッダーより左にある最も右端のテキストを探す
     const natDataRights=items
-      .filter(it=> natHdr && it.y>signHdrY+5 && it.x>=natHdr.x-10 && it.x<signHdr.x)
+      .filter(it=> it.y>signHdrY+5 && it.y<signHdrY+300 && it.x+it.w < signHdr.x+10)
       .map(it=>it.x+it.w);
     const natRightX = natDataRights.length>0
       ? Math.max(...natDataRights)
-      : (natHdr ? natHdr.x+natHdr.w : signHdr.x);
-    // Sign列左端 = Nationality右端 + 余白、右端 = ページ右端
-    const signColLeftX = natRightX + 8;
+      : (natHdr ? natHdr.x+natHdr.w : signHdr.x-5);
+
+    const signColLeftX = natRightX + 5;
     const signColRightX = pdfPageW - 8;
+    const signColX = signHdr.x;
 
-    const signColX=signHdr.x; // 名前フィルタ用（Sign文字のX）
-
-    // ── "No" ヘッダーを探す（緩い条件）──
-    const noHdr=items.find(it=>/^no$/i.test(it.str) && Math.abs(it.y-signHdrY)<20);
+    // ── "No" ヘッダーを探す（部分一致）──
+    const noHdr=items.find(it=>/^no$/i.test(it.str) && Math.abs(it.y-signHdrY)<20)
+      || items.find(it=>/^no/i.test(it.str) && it.w<20 && Math.abs(it.y-signHdrY)<20);
 
     // ── 行番号を探す ──
-    // ヘッダー行より下にある 1桁〜2桁の数字
-    // X座標はNoヘッダーのX ±80pt 以内（緩めに）
-    const noX=noHdr ? noHdr.x : 80;
-    const tableStartY=signHdrY + 5; // ヘッダーより少し下
+    // No列のX付近 かつ ヘッダーより下にある1〜2桁の数字
+    const noX = noHdr ? noHdr.x : 55;
+    const tableStartY = signHdrY + 5;
 
     const numItems=items.filter(it=>{
       if(!/^\d{1,2}$/.test(it.str)) return false;
       if(it.y < tableStartY) return false;
-      if(Math.abs(it.x - noX) > 100) return false;
+      if(Math.abs(it.x - noX) > 120) return false; // 許容範囲を広めに
       return true;
     }).sort((a,b)=>a.y-b.y);
 
