@@ -214,29 +214,49 @@ async function loadPDF(file){
     const content=await page.getTextContent();
 
     // ── テキストアイテムを正規化 ──
-    // pdf.jsのgetViewport({scale:1})のtransformを使って
-    // 座標を「左上原点・ポイント単位」に変換する
-    const items=[];
+    // PDFによっては1文字ずつ別アイテムになる場合があるため
+    // 中心Y座標でライングループ化→近接文字を結合して単語を再構築する
+    const rawItems=[];
     for(const it of content.items){
       if(!it.str || !it.str.trim()) continue;
       const tx=it.transform[4];
       const ty=it.transform[5];
-      const w=Math.abs(it.width);
-      const h=Math.abs(it.height)||10;
-      // pdf.jsは複数行や複数単語を1アイテムにまとめることがある
-      // → 改行・タブで分割し、最初の意味ある部分だけを使う
-      const rawStr = it.str.trim();
-      // 改行・タブ・スペース連続を区切りとして最初のトークンを取得
-      const firstToken = rawStr.split(/[
-	]+/)[0].trim();
-      items.push({
-        str: firstToken,
-        raw: rawStr,
-        x:   tx,
-        y:   pdfPageH - ty,
-        w:   w,
-        h:   h
-      });
+      const h=Math.abs(it.height)||8;
+      const yTop=pdfPageH-ty;
+      const yCtr=yTop+h/2;
+      rawItems.push({x:tx, x1:tx+Math.abs(it.width), yCtr, str:it.str});
+    }
+    rawItems.sort((a,b)=>a.x-b.x);
+
+    // 中心Yが±4pt以内のアイテムを同じ行にグループ化
+    const lineGroups=[];
+    for(const ri of rawItems){
+      let placed=false;
+      for(const lg of lineGroups){
+        if(Math.abs(ri.yCtr-lg.yCtr)<4.0){
+          lg.items.push(ri);
+          lg.yCtr=lg.items.reduce((s,i)=>s+i.yCtr,0)/lg.items.length;
+          placed=true; break;
+        }
+      }
+      if(!placed) lineGroups.push({yCtr:ri.yCtr,items:[ri]});
+    }
+
+    // 各ラインをX順に並べ、X間隔4pt以内の文字を結合して単語にする
+    const items=[];
+    for(const lg of lineGroups.sort((a,b)=>a.yCtr-b.yCtr)){
+      lg.items.sort((a,b)=>a.x-b.x);
+      let cur=null;
+      for(const ri of lg.items){
+        if(!cur){cur={...ri};}
+        else if(ri.x-cur.x1<4.0){cur.str+=ri.str;cur.x1=ri.x1;}
+        else{
+          const s=cur.str.trim();
+          if(s) items.push({str:s,raw:s,x:cur.x,y:lg.yCtr,w:cur.x1-cur.x,h:8});
+          cur={...ri};
+        }
+      }
+      if(cur){const s=cur.str.trim();if(s)items.push({str:s,raw:s,x:cur.x,y:lg.yCtr,w:cur.x1-cur.x,h:8});}
     }
 
     // ── "Sign" ヘッダーを探す ──
