@@ -652,7 +652,7 @@ function backToModeSelect(){
 }
 
 /* ── 領収書貼付モード ── */
-let raVoucherBytes=null, raReceiptDataURL=null;
+let raVoucherBytes=null, raReceiptDataURL=null, raReceiptBytes=null, raReceiptMime=null;
 
 document.getElementById('raVoucherInput').addEventListener('change', async e=>{
   const file=e.target.files[0]; if(!file) return;
@@ -667,29 +667,37 @@ document.getElementById('raVoucherInput').addEventListener('change', async e=>{
 
 document.getElementById('raReceiptInput').addEventListener('change', async e=>{
   const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    raReceiptDataURL=ev.target.result;
+  raReceiptMime=file.type;
+
+  if(file.type==='application/pdf'){
+    // PDFはArrayBufferで読む
+    const ab=await file.arrayBuffer();
+    raReceiptBytes=new Uint8Array(ab);
+    raReceiptDataURL=null;
+    document.getElementById('raReceiptIcon').textContent='📋';
+    document.getElementById('raReceiptPreview').style.display='none';
+  } else {
+    // 画像はDataURLで読む（プレビュー表示用）
+    raReceiptBytes=null;
+    await new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=ev=>{ raReceiptDataURL=ev.target.result; resolve(); };
+      reader.readAsDataURL(file);
+    });
     const prev=document.getElementById('raReceiptPreview');
-    const box=document.getElementById('raReceiptBox');
-    if(file.type==='application/pdf'){
-      prev.style.display='none';
-      document.getElementById('raReceiptIcon').textContent='📋';
-    } else {
-      prev.src=raReceiptDataURL; prev.style.display='block';
-    }
-    box.classList.add('has-file');
-    document.getElementById('raReceiptName').textContent='✓ '+file.name;
-    document.getElementById('raReceiptName').style.display='block';
-    updateRaBtn();
-  };
-  reader.readAsDataURL(file);
+    prev.src=raReceiptDataURL; prev.style.display='block';
+  }
+  document.getElementById('raReceiptBox').classList.add('has-file');
+  document.getElementById('raReceiptName').textContent='✓ '+file.name;
+  document.getElementById('raReceiptName').style.display='block';
+  updateRaBtn();
 });
 
 function updateRaBtn(){
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
-  if(raVoucherBytes && raReceiptDataURL){
+  const hasReceipt = raReceiptDataURL || raReceiptBytes;
+  if(raVoucherBytes && hasReceipt){
     btn.className='ra-dl-btn ready';
     txt.textContent='領収書を貼り付けてダウンロード';
   } else if(!raVoucherBytes){
@@ -697,12 +705,13 @@ function updateRaBtn(){
     txt.textContent='STEP1: サイン済みPDFを選択してください';
   } else {
     btn.className='ra-dl-btn';
-    txt.textContent='STEP2: 領収書画像を選択してください';
+    txt.textContent='STEP2: 領収書を選択してください';
   }
 }
 
 async function attachReceiptToPDF(){
-  if(!raVoucherBytes || !raReceiptDataURL) return;
+  const hasReceipt = raReceiptDataURL || raReceiptBytes;
+  if(!raVoucherBytes || !hasReceipt) return;
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
   btn.className='ra-dl-btn'; txt.textContent='処理中...'; 
@@ -747,9 +756,9 @@ async function attachReceiptToPDF(){
       const imgB64=raReceiptDataURL.split(',')[1];
       const mime=raReceiptDataURL.split(';')[0].split(':')[1];
 
-      if(mime==='application/pdf'){
-        // PDFの場合：1ページ目をそのまま埋め込む
-        const receiptPdfDoc=await PDFLib.PDFDocument.load(b64ToU8(imgB64));
+      if(raReceiptBytes){
+        // PDFの場合：ArrayBytesから直接埋め込む
+        const receiptPdfDoc=await PDFLib.PDFDocument.load(raReceiptBytes);
         const [embPage]=await doc.embedPages([receiptPdfDoc.getPages()[0]]);
         const embDims=embPage.size();
         const sc=Math.min(spaceW/embDims.width, spaceH/embDims.height, 1.0);
@@ -1239,7 +1248,8 @@ document.getElementById('raVoucherInput').addEventListener('change', async e=>{
 function updateRaBtn(){
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
-  if(raVoucherBytes && raReceiptDataURL){
+  const hasReceipt = raReceiptDataURL || raReceiptBytes;
+  if(raVoucherBytes && hasReceipt){
     btn.className='ra-dl-btn ready';
     txt.textContent='領収書を貼り付けてダウンロード';
   } else if(!raVoucherBytes){
@@ -1247,12 +1257,13 @@ function updateRaBtn(){
     txt.textContent='STEP1: サイン済みPDFを選択してください';
   } else {
     btn.className='ra-dl-btn';
-    txt.textContent='STEP2: 領収書画像を選択してください';
+    txt.textContent='STEP2: 領収書を選択してください';
   }
 }
 
 async function attachReceiptToPDF(){
-  if(!raVoucherBytes || !raReceiptDataURL) return;
+  const hasReceipt = raReceiptDataURL || raReceiptBytes;
+  if(!raVoucherBytes || !hasReceipt) return;
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
   btn.className='ra-dl-btn'; txt.textContent='処理中...'; 
@@ -1297,9 +1308,9 @@ async function attachReceiptToPDF(){
       const imgB64=raReceiptDataURL.split(',')[1];
       const mime=raReceiptDataURL.split(';')[0].split(':')[1];
 
-      if(mime==='application/pdf'){
-        // PDFの場合：1ページ目をそのまま埋め込む
-        const receiptPdfDoc=await PDFLib.PDFDocument.load(b64ToU8(imgB64));
+      if(raReceiptBytes){
+        // PDFの場合：ArrayBytesから直接埋め込む
+        const receiptPdfDoc=await PDFLib.PDFDocument.load(raReceiptBytes);
         const [embPage]=await doc.embedPages([receiptPdfDoc.getPages()[0]]);
         const embDims=embPage.size();
         const sc=Math.min(spaceW/embDims.width, spaceH/embDims.height, 1.0);
