@@ -119,6 +119,34 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .s-btn-clear{background:#1e3a5f;color:#94a3b8;}
 .s-btn-save{background:var(--blue);color:#fff;}
 .s-btn-save:disabled{background:#1e3a5f;color:#475569;}
+
+/* ── モード選択 ── */
+.mode-select{display:flex;flex-direction:column;gap:10px;}
+.mode-label{font-size:13px;font-weight:800;color:#64748b;text-align:center;text-transform:uppercase;letter-spacing:.07em;}
+.mode-btn{width:100%;padding:18px 16px;border-radius:14px;border:2px solid var(--border,#d1dce8);background:#fff;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .15s,background .15s;-webkit-user-select:none;user-select:none;text-align:left;}
+.mode-btn:active{opacity:.85;}
+.mode-btn.sign-mode{border-color:#2563eb;}
+.mode-btn.receipt-mode{border-color:#f59e0b;}
+.mode-btn-icon{font-size:28px;flex-shrink:0;}
+.mode-btn-text{}
+.mode-btn-title{font-size:15px;font-weight:800;color:#1e293b;}
+.mode-btn-sub{font-size:12px;color:#64748b;margin-top:2px;line-height:1.4;}
+
+/* ── 領収書貼付モード ── */
+.receipt-attach-screen{display:none;flex-direction:column;gap:12px;}
+.ra-box{background:#fff;border:2px dashed var(--border,#d1dce8);border-radius:12px;padding:20px 16px;text-align:center;cursor:pointer;transition:border-color .2s;-webkit-user-select:none;user-select:none;}
+.ra-box:active,.ra-box.has-file{border-color:#16a34a;background:#f0fdf4;}
+.ra-box.drag{border-color:#2563eb;background:#eff6ff;}
+.ra-box-icon{font-size:32px;margin-bottom:6px;}
+.ra-box-label{font-size:14px;font-weight:800;color:#1e293b;}
+.ra-box-sub{font-size:11px;color:#64748b;margin-top:3px;}
+.ra-preview{width:100%;max-height:120px;object-fit:contain;border-radius:6px;margin-top:8px;display:none;}
+.ra-filename{font-size:11px;font-weight:600;color:#16a34a;margin-top:4px;display:none;}
+.ra-dl-btn{width:100%;padding:16px;border-radius:12px;border:none;cursor:pointer;font-size:15px;font-weight:900;background:#d1dce8;color:#94a3b8;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s;}
+.ra-dl-btn.ready{background:#16a34a;color:#fff;}
+.ra-dl-btn.ready:active{opacity:.85;}
+.ra-back{background:none;border:1.5px solid var(--border,#d1dce8);border-radius:10px;padding:10px;width:100%;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;}
+.ra-back:active{opacity:.7;}
 </style>
 </head>
 <body>
@@ -134,15 +162,39 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
 <div class="body">
   <div class="upload-screen" id="uploadScreen">
-    <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
-      <div class="upload-icon">📄</div>
-      <div class="upload-label">PDFをタップして選択</div>
-      <div class="upload-sub">VoucherのPDFファイルを<br>ここにアップロード</div>
-      <input type="file" id="fileInput" accept="application/pdf">
+
+    <!-- モード選択 -->
+    <div class="mode-select" id="modeSelect">
+      <div class="mode-label">モードを選択</div>
+      <div class="mode-btn sign-mode" onclick="showSignUpload()">
+        <div class="mode-btn-icon">✍️</div>
+        <div class="mode-btn-text">
+          <div class="mode-btn-title">サインをもらう</div>
+          <div class="mode-btn-sub">VoucherのPDFをアップロードしてクルーにサインしてもらう</div>
+        </div>
+      </div>
+      <div class="mode-btn receipt-mode" onclick="showReceiptAttach()">
+        <div class="mode-btn-icon">🧾</div>
+        <div class="mode-btn-text">
+          <div class="mode-btn-title">領収書を貼り付ける</div>
+          <div class="mode-btn-sub">サイン済みVoucherのPDFに領収書画像を追加する</div>
+        </div>
+      </div>
     </div>
-    <div class="upload-note">
-      <strong>Sign列を自動検出します</strong><br>
-      PDFを読み込むと、表のSign列にある空白セルを自動で検出し、各クルーのサイン欄を表示します。
+
+    <!-- サインモード：PDFアップロード -->
+    <div id="signUploadArea" style="display:none;flex-direction:column;gap:12px;">
+      <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">📄</div>
+        <div class="upload-label">PDFをタップして選択</div>
+        <div class="upload-sub">VoucherのPDFファイルを<br>ここにアップロード</div>
+        <input type="file" id="fileInput" accept="application/pdf">
+      </div>
+      <div class="upload-note">
+        <strong>Sign列を自動検出します</strong><br>
+        PDFを読み込むと、表のSign列にある空白セルを自動で検出し、各クルーのサイン欄を表示します。
+      </div>
+      <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
     </div>
 
     <!-- バージョン履歴 -->
@@ -150,11 +202,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v1.9</span>
+          <span class="version-current">v2.0</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.0</span>
+            <span class="ver-date">2026/09/25</span>
+            <span class="ver-tag new">新機能</span>
+          </div>
+          <ul class="ver-changes">
+            <li>モード選択画面を追加（サインモード／領収書貼付モード）</li>
+            <li>「領収書を貼り付ける」モード：サイン済みVoucher PDFに領収書画像を後から追加可能に</li>
+            <li>クルーテーブル下・Important Notice上の空白に自動配置</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v1.9</span>
@@ -218,6 +282,43 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
         </div>
       </div>
     </div>
+  </div><!-- /upload-screen -->
+
+  <!-- 領収書貼付モード -->
+  <div class="receipt-attach-screen" id="receiptAttachScreen">
+    <div class="sec-label">🧾 領収書をVoucherに貼り付け</div>
+
+    <!-- Step1: サイン済みVoucher PDF -->
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― サイン済みVoucher PDF</div>
+      <div class="ra-box" id="raVoucherBox" onclick="document.getElementById('raVoucherInput').click()">
+        <div class="ra-box-icon">📄</div>
+        <div class="ra-box-label">サイン済みPDFを選択</div>
+        <div class="ra-box-sub">signed_voucher.pdf など</div>
+        <img id="raVoucherPreview" class="ra-preview" alt="">
+        <div id="raVoucherName" class="ra-filename"></div>
+        <input type="file" id="raVoucherInput" accept="application/pdf" style="display:none;">
+      </div>
+    </div>
+
+    <!-- Step2: 領収書画像 -->
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― 領収書画像</div>
+      <div class="ra-box" id="raReceiptBox" onclick="document.getElementById('raReceiptInput').click()">
+        <div class="ra-box-icon">🧾</div>
+        <div class="ra-box-label">領収書を選択</div>
+        <div class="ra-box-sub">JPG / PNG 対応</div>
+        <img id="raReceiptPreview" class="ra-preview" alt="">
+        <div id="raReceiptName" class="ra-filename"></div>
+        <input type="file" id="raReceiptInput" accept="image/*" style="display:none;">
+      </div>
+    </div>
+
+    <!-- 実行ボタン -->
+    <button class="ra-dl-btn" id="raDlBtn" onclick="attachReceiptToPDF()">
+      <span>📎</span><span id="raDlBtnText">PDFと領収書を選択してください</span>
+    </button>
+    <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
   </div>
 
   <div class="processing" id="processingScreen">
@@ -525,6 +626,147 @@ function resetApp(){
   pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書をタップして追加</div><div class='receipt-sub'>JPG / PNG / PDF対応</div><input type='file' id='receiptInput' accept='image/*,application/pdf'>`; document.getElementById('receiptInput').addEventListener('change',onReceiptFile);
   document.getElementById('fileInput').value='';
   showScreen('upload');
+
+/* ── モード切替 ── */
+function showSignUpload(){
+  document.getElementById('modeSelect').style.display='none';
+  document.getElementById('signUploadArea').style.display='flex';
+}
+function showReceiptAttach(){
+  document.getElementById('uploadScreen').style.display='none';
+  document.getElementById('receiptAttachScreen').style.display='flex';
+  document.getElementById('headerSub').textContent='領収書貼付モード';
+}
+function backToModeSelect(){
+  document.getElementById('modeSelect').style.display='flex';
+  document.getElementById('signUploadArea').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  document.getElementById('receiptAttachScreen').style.display='none';
+  document.getElementById('headerSub').textContent='PDFをアップロードしてください';
+}
+
+/* ── 領収書貼付モード ── */
+let raVoucherBytes=null, raReceiptDataURL=null;
+
+document.getElementById('raVoucherInput').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const ab=await file.arrayBuffer();
+  raVoucherBytes=new Uint8Array(ab);
+  const box=document.getElementById('raVoucherBox');
+  box.classList.add('has-file');
+  document.getElementById('raVoucherName').textContent='✓ '+file.name;
+  document.getElementById('raVoucherName').style.display='block';
+  updateRaBtn();
+});
+
+document.getElementById('raReceiptInput').addEventListener('change', e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    raReceiptDataURL=ev.target.result;
+    const prev=document.getElementById('raReceiptPreview');
+    prev.src=raReceiptDataURL; prev.style.display='block';
+    document.getElementById('raReceiptBox').classList.add('has-file');
+    document.getElementById('raReceiptName').textContent='✓ '+file.name;
+    document.getElementById('raReceiptName').style.display='block';
+    updateRaBtn();
+  };
+  reader.readAsDataURL(file);
+});
+
+function updateRaBtn(){
+  const btn=document.getElementById('raDlBtn');
+  const txt=document.getElementById('raDlBtnText');
+  if(raVoucherBytes && raReceiptDataURL){
+    btn.className='ra-dl-btn ready';
+    txt.textContent='領収書を貼り付けてダウンロード';
+  } else if(!raVoucherBytes){
+    btn.className='ra-dl-btn';
+    txt.textContent='STEP1: サイン済みPDFを選択してください';
+  } else {
+    btn.className='ra-dl-btn';
+    txt.textContent='STEP2: 領収書画像を選択してください';
+  }
+}
+
+async function attachReceiptToPDF(){
+  if(!raVoucherBytes || !raReceiptDataURL) return;
+  const btn=document.getElementById('raDlBtn');
+  const txt=document.getElementById('raDlBtnText');
+  btn.className='ra-dl-btn'; txt.textContent='処理中...'; 
+
+  try{
+    const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
+    const page=doc.getPages()[0];
+    const {width:W, height:H}=page.getSize();
+
+    // ── 空白スペースを検出（クルーテーブル下〜Important Notice上）──
+    const pdfjsDoc=await pdfjsLib.getDocument({data:raVoucherBytes.slice()}).promise;
+    const pg=await pdfjsDoc.getPage(1);
+    const content=await pg.getTextContent();
+
+    // 全テキストを中心Yでグループ化（先ほどのロジックと同じ）
+    const rawItems2=[];
+    for(const it of content.items){
+      if(!it.str||!it.str.trim()) continue;
+      const tx=it.transform[4], ty=it.transform[5];
+      const h2=Math.abs(it.height)||8;
+      rawItems2.push({x:tx,x1:tx+Math.abs(it.width),yCtr:ty+h2/2,str:it.str,yPDF:ty});
+    }
+    // 数字行の最小Y（PDF左下原点）= テーブル最終行
+    const numYs=rawItems2.filter(i=>/^\d{1,2}$/.test(i.str.trim())&&i.yPDF<H*0.8&&i.yPDF>H*0.1).map(i=>i.yPDF);
+    const tableBottomY = numYs.length>0 ? Math.min(...numYs) - 5 : H*0.6;
+
+    // Important Notice のY（PDF左下原点）
+    const impItems=rawItems2.filter(i=>/important/i.test(i.str)&&i.yPDF<H*0.6);
+    const importantTopY = impItems.length>0 ? Math.max(...impItems.map(i=>i.yPDF+15)) : H*0.25;
+
+    // 空白スペース
+    const margin=12;
+    const spaceBottom = importantTopY + margin;
+    const spaceTop    = tableBottomY - margin;
+    const spaceLeft   = W * 0.07;
+    const spaceRight  = W * 0.93;
+    const spaceW      = spaceRight - spaceLeft;
+    const spaceH      = spaceTop - spaceBottom;
+
+    if(spaceH > 20){
+      // 画像埋め込み
+      const imgB64=raReceiptDataURL.split(',')[1];
+      const mime=raReceiptDataURL.split(';')[0].split(':')[1];
+      let embImg;
+      if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
+      else embImg=await doc.embedJpg(b64ToU8(imgB64));
+
+      const dims=embImg.scale(1);
+      const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
+      const dw=dims.width*sc, dh=dims.height*sc;
+      const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
+
+      page.drawImage(embImg,{
+        x: spaceLeft+ox,
+        y: spaceBottom+oy,
+        width: dw, height: dh
+      });
+    }
+
+    const out=await doc.save();
+    const blob=new Blob([out],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
+    URL.revokeObjectURL(url);
+
+    txt.textContent='ダウンロード完了 ✓';
+    btn.className='ra-dl-btn ready';
+    setTimeout(()=>{ txt.textContent='領収書を貼り付けてダウンロード'; },3000);
+
+  }catch(err){
+    console.error(err);
+    txt.textContent='エラーが発生しました';
+    btn.className='ra-dl-btn ready';
+  }
+}
 
 function toggleVersion(){
   const body=document.getElementById('versionBody');
@@ -934,6 +1176,147 @@ function escHtml(s){
 }
 
 showScreen('upload');
+
+/* ── モード切替 ── */
+function showSignUpload(){
+  document.getElementById('modeSelect').style.display='none';
+  document.getElementById('signUploadArea').style.display='flex';
+}
+function showReceiptAttach(){
+  document.getElementById('uploadScreen').style.display='none';
+  document.getElementById('receiptAttachScreen').style.display='flex';
+  document.getElementById('headerSub').textContent='領収書貼付モード';
+}
+function backToModeSelect(){
+  document.getElementById('modeSelect').style.display='flex';
+  document.getElementById('signUploadArea').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  document.getElementById('receiptAttachScreen').style.display='none';
+  document.getElementById('headerSub').textContent='PDFをアップロードしてください';
+}
+
+/* ── 領収書貼付モード ── */
+let raVoucherBytes=null, raReceiptDataURL=null;
+
+document.getElementById('raVoucherInput').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const ab=await file.arrayBuffer();
+  raVoucherBytes=new Uint8Array(ab);
+  const box=document.getElementById('raVoucherBox');
+  box.classList.add('has-file');
+  document.getElementById('raVoucherName').textContent='✓ '+file.name;
+  document.getElementById('raVoucherName').style.display='block';
+  updateRaBtn();
+});
+
+document.getElementById('raReceiptInput').addEventListener('change', e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    raReceiptDataURL=ev.target.result;
+    const prev=document.getElementById('raReceiptPreview');
+    prev.src=raReceiptDataURL; prev.style.display='block';
+    document.getElementById('raReceiptBox').classList.add('has-file');
+    document.getElementById('raReceiptName').textContent='✓ '+file.name;
+    document.getElementById('raReceiptName').style.display='block';
+    updateRaBtn();
+  };
+  reader.readAsDataURL(file);
+});
+
+function updateRaBtn(){
+  const btn=document.getElementById('raDlBtn');
+  const txt=document.getElementById('raDlBtnText');
+  if(raVoucherBytes && raReceiptDataURL){
+    btn.className='ra-dl-btn ready';
+    txt.textContent='領収書を貼り付けてダウンロード';
+  } else if(!raVoucherBytes){
+    btn.className='ra-dl-btn';
+    txt.textContent='STEP1: サイン済みPDFを選択してください';
+  } else {
+    btn.className='ra-dl-btn';
+    txt.textContent='STEP2: 領収書画像を選択してください';
+  }
+}
+
+async function attachReceiptToPDF(){
+  if(!raVoucherBytes || !raReceiptDataURL) return;
+  const btn=document.getElementById('raDlBtn');
+  const txt=document.getElementById('raDlBtnText');
+  btn.className='ra-dl-btn'; txt.textContent='処理中...'; 
+
+  try{
+    const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
+    const page=doc.getPages()[0];
+    const {width:W, height:H}=page.getSize();
+
+    // ── 空白スペースを検出（クルーテーブル下〜Important Notice上）──
+    const pdfjsDoc=await pdfjsLib.getDocument({data:raVoucherBytes.slice()}).promise;
+    const pg=await pdfjsDoc.getPage(1);
+    const content=await pg.getTextContent();
+
+    // 全テキストを中心Yでグループ化（先ほどのロジックと同じ）
+    const rawItems2=[];
+    for(const it of content.items){
+      if(!it.str||!it.str.trim()) continue;
+      const tx=it.transform[4], ty=it.transform[5];
+      const h2=Math.abs(it.height)||8;
+      rawItems2.push({x:tx,x1:tx+Math.abs(it.width),yCtr:ty+h2/2,str:it.str,yPDF:ty});
+    }
+    // 数字行の最小Y（PDF左下原点）= テーブル最終行
+    const numYs=rawItems2.filter(i=>/^\d{1,2}$/.test(i.str.trim())&&i.yPDF<H*0.8&&i.yPDF>H*0.1).map(i=>i.yPDF);
+    const tableBottomY = numYs.length>0 ? Math.min(...numYs) - 5 : H*0.6;
+
+    // Important Notice のY（PDF左下原点）
+    const impItems=rawItems2.filter(i=>/important/i.test(i.str)&&i.yPDF<H*0.6);
+    const importantTopY = impItems.length>0 ? Math.max(...impItems.map(i=>i.yPDF+15)) : H*0.25;
+
+    // 空白スペース
+    const margin=12;
+    const spaceBottom = importantTopY + margin;
+    const spaceTop    = tableBottomY - margin;
+    const spaceLeft   = W * 0.07;
+    const spaceRight  = W * 0.93;
+    const spaceW      = spaceRight - spaceLeft;
+    const spaceH      = spaceTop - spaceBottom;
+
+    if(spaceH > 20){
+      // 画像埋め込み
+      const imgB64=raReceiptDataURL.split(',')[1];
+      const mime=raReceiptDataURL.split(';')[0].split(':')[1];
+      let embImg;
+      if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
+      else embImg=await doc.embedJpg(b64ToU8(imgB64));
+
+      const dims=embImg.scale(1);
+      const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
+      const dw=dims.width*sc, dh=dims.height*sc;
+      const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
+
+      page.drawImage(embImg,{
+        x: spaceLeft+ox,
+        y: spaceBottom+oy,
+        width: dw, height: dh
+      });
+    }
+
+    const out=await doc.save();
+    const blob=new Blob([out],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
+    URL.revokeObjectURL(url);
+
+    txt.textContent='ダウンロード完了 ✓';
+    btn.className='ra-dl-btn ready';
+    setTimeout(()=>{ txt.textContent='領収書を貼り付けてダウンロード'; },3000);
+
+  }catch(err){
+    console.error(err);
+    txt.textContent='エラーが発生しました';
+    btn.className='ra-dl-btn ready';
+  }
+}
 
 function toggleVersion(){
   const body=document.getElementById('versionBody');
