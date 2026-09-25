@@ -307,10 +307,10 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="ra-box" id="raReceiptBox" onclick="document.getElementById('raReceiptInput').click()">
         <div class="ra-box-icon">🧾</div>
         <div class="ra-box-label">領収書を選択</div>
-        <div class="ra-box-sub">JPG / PNG 対応</div>
+        <div class="ra-box-sub">JPG / PNG / PDF 対応</div>
         <img id="raReceiptPreview" class="ra-preview" alt="">
         <div id="raReceiptName" class="ra-filename"></div>
-        <input type="file" id="raReceiptInput" accept="image/*" style="display:none;">
+        <input type="file" id="raReceiptInput" accept="image/*,application/pdf" style="display:none;">
       </div>
     </div>
 
@@ -659,14 +659,20 @@ document.getElementById('raVoucherInput').addEventListener('change', async e=>{
   updateRaBtn();
 });
 
-document.getElementById('raReceiptInput').addEventListener('change', e=>{
+document.getElementById('raReceiptInput').addEventListener('change', async e=>{
   const file=e.target.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=ev=>{
     raReceiptDataURL=ev.target.result;
     const prev=document.getElementById('raReceiptPreview');
-    prev.src=raReceiptDataURL; prev.style.display='block';
-    document.getElementById('raReceiptBox').classList.add('has-file');
+    const box=document.getElementById('raReceiptBox');
+    if(file.type==='application/pdf'){
+      prev.style.display='none';
+      box.querySelector('.ra-box-icon').textContent='📋';
+    } else {
+      prev.src=raReceiptDataURL; prev.style.display='block';
+    }
+    box.classList.add('has-file');
     document.getElementById('raReceiptName').textContent='✓ '+file.name;
     document.getElementById('raReceiptName').style.display='block';
     updateRaBtn();
@@ -734,20 +740,33 @@ async function attachReceiptToPDF(){
       // 画像埋め込み
       const imgB64=raReceiptDataURL.split(',')[1];
       const mime=raReceiptDataURL.split(';')[0].split(':')[1];
-      let embImg;
-      if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
-      else embImg=await doc.embedJpg(b64ToU8(imgB64));
 
-      const dims=embImg.scale(1);
-      const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
-      const dw=dims.width*sc, dh=dims.height*sc;
-      const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
-
-      page.drawImage(embImg,{
-        x: spaceLeft+ox,
-        y: spaceBottom+oy,
-        width: dw, height: dh
-      });
+      if(mime==='application/pdf'){
+        // PDFの場合：1ページ目をそのまま埋め込む
+        const receiptPdfDoc=await PDFLib.PDFDocument.load(b64ToU8(imgB64));
+        const [embPage]=await doc.embedPages([receiptPdfDoc.getPages()[0]]);
+        const embDims=embPage.size();
+        const sc=Math.min(spaceW/embDims.width, spaceH/embDims.height, 1.0);
+        const dw=embDims.width*sc, dh=embDims.height*sc;
+        const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
+        page.drawPage(embPage,{
+          x: spaceLeft+ox, y: spaceBottom+oy,
+          width: dw, height: dh
+        });
+      } else {
+        // 画像（JPG/PNG）の場合
+        let embImg;
+        if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
+        else embImg=await doc.embedJpg(b64ToU8(imgB64));
+        const dims=embImg.scale(1);
+        const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
+        const dw=dims.width*sc, dh=dims.height*sc;
+        const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
+        page.drawImage(embImg,{
+          x: spaceLeft+ox, y: spaceBottom+oy,
+          width: dw, height: dh
+        });
+      }
     }
 
     const out=await doc.save();
@@ -1209,20 +1228,7 @@ document.getElementById('raVoucherInput').addEventListener('change', async e=>{
   updateRaBtn();
 });
 
-document.getElementById('raReceiptInput').addEventListener('change', e=>{
-  const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    raReceiptDataURL=ev.target.result;
-    const prev=document.getElementById('raReceiptPreview');
-    prev.src=raReceiptDataURL; prev.style.display='block';
-    document.getElementById('raReceiptBox').classList.add('has-file');
-    document.getElementById('raReceiptName').textContent='✓ '+file.name;
-    document.getElementById('raReceiptName').style.display='block';
-    updateRaBtn();
-  };
-  reader.readAsDataURL(file);
-});
+
 
 function updateRaBtn(){
   const btn=document.getElementById('raDlBtn');
@@ -1284,20 +1290,33 @@ async function attachReceiptToPDF(){
       // 画像埋め込み
       const imgB64=raReceiptDataURL.split(',')[1];
       const mime=raReceiptDataURL.split(';')[0].split(':')[1];
-      let embImg;
-      if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
-      else embImg=await doc.embedJpg(b64ToU8(imgB64));
 
-      const dims=embImg.scale(1);
-      const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
-      const dw=dims.width*sc, dh=dims.height*sc;
-      const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
-
-      page.drawImage(embImg,{
-        x: spaceLeft+ox,
-        y: spaceBottom+oy,
-        width: dw, height: dh
-      });
+      if(mime==='application/pdf'){
+        // PDFの場合：1ページ目をそのまま埋め込む
+        const receiptPdfDoc=await PDFLib.PDFDocument.load(b64ToU8(imgB64));
+        const [embPage]=await doc.embedPages([receiptPdfDoc.getPages()[0]]);
+        const embDims=embPage.size();
+        const sc=Math.min(spaceW/embDims.width, spaceH/embDims.height, 1.0);
+        const dw=embDims.width*sc, dh=embDims.height*sc;
+        const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
+        page.drawPage(embPage,{
+          x: spaceLeft+ox, y: spaceBottom+oy,
+          width: dw, height: dh
+        });
+      } else {
+        // 画像（JPG/PNG）の場合
+        let embImg;
+        if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
+        else embImg=await doc.embedJpg(b64ToU8(imgB64));
+        const dims=embImg.scale(1);
+        const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
+        const dw=dims.width*sc, dh=dims.height*sc;
+        const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
+        page.drawImage(embImg,{
+          x: spaceLeft+ox, y: spaceBottom+oy,
+          width: dw, height: dh
+        });
+      }
     }
 
     const out=await doc.save();
