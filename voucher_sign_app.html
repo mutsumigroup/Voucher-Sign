@@ -291,29 +291,33 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <!-- Step1: サイン済みVoucher PDF -->
     <div>
       <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― サイン済みVoucher PDF</div>
-      <label class="ra-box" id="raVoucherBox" for="raVoucherInput" style="display:block;">
-        <div class="ra-box-icon">📄</div>
-        <div class="ra-box-label">サイン済みPDFを選択</div>
-        <div class="ra-box-sub">signed_voucher.pdf など</div>
-        <img id="raVoucherPreview" class="ra-preview" alt="">
-        <div id="raVoucherName" class="ra-filename"></div>
+      <div class="ra-box" id="raVoucherBox" style="position:relative;padding-bottom:0;">
+        <div id="raVoucherContent">
+          <div class="ra-box-icon">📄</div>
+          <div class="ra-box-label">サイン済みPDFを選択</div>
+          <div class="ra-box-sub">signed_voucher.pdf など</div>
+          <div id="raVoucherName" class="ra-filename"></div>
+        </div>
         <input type="file" id="raVoucherInput" accept="application/pdf"
-               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
-      </label>
+               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;font-size:16px;">
+      </div>
     </div>
 
     <!-- Step2: 領収書 -->
     <div>
       <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― 領収書画像 / PDF</div>
-      <label class="ra-box" id="raReceiptBox" for="raReceiptInput" style="display:block;">
-        <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
-        <div class="ra-box-label">領収書を選択</div>
-        <div class="ra-box-sub">JPG / PNG / PDF 対応</div>
-        <img id="raReceiptPreview" class="ra-preview" alt="">
-        <div id="raReceiptName" class="ra-filename"></div>
+      <div class="ra-box" id="raReceiptBox" style="position:relative;padding-bottom:0;">
+        <div id="raReceiptContent">
+          <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
+          <div class="ra-box-label">領収書を選択</div>
+          <div class="ra-box-sub">JPG / PNG / PDF 対応</div>
+          <img id="raReceiptPreview" class="ra-preview" alt="">
+          <div id="raReceiptName" class="ra-filename"></div>
+        </div>
+        <!-- inputを全面に重ねる（透明・タップ領域最大化）-->
         <input type="file" id="raReceiptInput" accept="image/*,application/pdf"
-               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
-      </label>
+               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;font-size:16px;">
+      </div>
     </div>
 
     <!-- 実行ボタン -->
