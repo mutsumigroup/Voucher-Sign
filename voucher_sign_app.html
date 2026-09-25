@@ -291,27 +291,29 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <!-- Step1: サイン済みVoucher PDF -->
     <div>
       <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― サイン済みVoucher PDF</div>
-      <div class="ra-box" id="raVoucherBox" onclick="document.getElementById('raVoucherInput').click()">
+      <label class="ra-box" id="raVoucherBox" for="raVoucherInput" style="display:block;">
         <div class="ra-box-icon">📄</div>
         <div class="ra-box-label">サイン済みPDFを選択</div>
         <div class="ra-box-sub">signed_voucher.pdf など</div>
         <img id="raVoucherPreview" class="ra-preview" alt="">
         <div id="raVoucherName" class="ra-filename"></div>
-        <input type="file" id="raVoucherInput" accept="application/pdf" style="display:none;">
-      </div>
+        <input type="file" id="raVoucherInput" accept="application/pdf"
+               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
+      </label>
     </div>
 
-    <!-- Step2: 領収書画像 -->
+    <!-- Step2: 領収書 -->
     <div>
-      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― 領収書画像</div>
-      <div class="ra-box" id="raReceiptBox" onclick="document.getElementById('raReceiptInput').click()">
-        <div class="ra-box-icon">🧾</div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― 領収書画像 / PDF</div>
+      <label class="ra-box" id="raReceiptBox" for="raReceiptInput" style="display:block;">
+        <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
         <div class="ra-box-label">領収書を選択</div>
         <div class="ra-box-sub">JPG / PNG / PDF 対応</div>
         <img id="raReceiptPreview" class="ra-preview" alt="">
         <div id="raReceiptName" class="ra-filename"></div>
-        <input type="file" id="raReceiptInput" accept="image/*,application/pdf" style="display:none;">
-      </div>
+        <input type="file" id="raReceiptInput" accept="image/*,application/pdf"
+               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
+      </label>
     </div>
 
     <!-- 実行ボタン -->
@@ -668,7 +670,7 @@ document.getElementById('raReceiptInput').addEventListener('change', async e=>{
     const box=document.getElementById('raReceiptBox');
     if(file.type==='application/pdf'){
       prev.style.display='none';
-      box.querySelector('.ra-box-icon').textContent='📋';
+      document.getElementById('raReceiptIcon').textContent='📋';
     } else {
       prev.src=raReceiptDataURL; prev.style.display='block';
     }
