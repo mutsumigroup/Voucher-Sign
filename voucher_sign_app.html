@@ -132,7 +132,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .mode-btn-title{font-size:15px;font-weight:800;color:#1e293b;}
 .mode-btn-sub{font-size:12px;color:#64748b;margin-top:2px;line-height:1.4;}
 
-/* ── 領収書貼付モード ── */
+/* ── Receipt Attach Mode ── */
 .receipt-attach-screen{display:none;flex-direction:column;gap:12px;}
 .ra-box{background:#fff;border:2px dashed var(--border,#d1dce8);border-radius:12px;padding:20px 16px;text-align:center;cursor:pointer;transition:border-color .2s;-webkit-user-select:none;user-select:none;}
 .ra-box:active,.ra-box.has-file{border-color:#16a34a;background:#f0fdf4;}
@@ -155,7 +155,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   <div class="header-icon">&#9875;</div>
   <div class="header-text">
     <div class="header-title">Voucher Sign</div>
-    <div class="header-sub" id="headerSub">PDFをアップロードしてください</div>
+    <div class="header-sub" id="headerSub">Upload a PDF to get started</div>
   </div>
   <div class="header-badge" id="headerBadge" style="display:none;">0 / 0</div>
 </div>
@@ -165,19 +165,19 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
     <!-- モード選択 -->
     <div class="mode-select" id="modeSelect">
-      <div class="mode-label">モードを選択</div>
+      <div class="mode-label">SELECT MODE</div>
       <div class="mode-btn sign-mode" onclick="showSignUpload()">
         <div class="mode-btn-icon">✍️</div>
         <div class="mode-btn-text">
-          <div class="mode-btn-title">サインをもらう</div>
-          <div class="mode-btn-sub">VoucherのPDFをアップロードしてクルーにサインしてもらう</div>
+          <div class="mode-btn-title">Collect Signatures</div>
+          <div class="mode-btn-sub">Upload a Voucher PDF and collect crew signatures</div>
         </div>
       </div>
       <div class="mode-btn receipt-mode" onclick="showReceiptAttach()">
         <div class="mode-btn-icon">🧾</div>
         <div class="mode-btn-text">
-          <div class="mode-btn-title">領収書を貼り付ける</div>
-          <div class="mode-btn-sub">サイン済みVoucherのPDFに領収書画像を追加する</div>
+          <div class="mode-btn-title">Attach Receipt</div>
+          <div class="mode-btn-sub">Add a receipt to a signed Voucher PDF</div>
         </div>
       </div>
     </div>
@@ -186,22 +186,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <div id="signUploadArea" style="display:none;flex-direction:column;gap:12px;">
       <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
         <div class="upload-icon">📄</div>
-        <div class="upload-label">PDFをタップして選択</div>
-        <div class="upload-sub">VoucherのPDFファイルを<br>ここにアップロード</div>
+        <div class="upload-label">Tap to select PDF</div>
+        <div class="upload-sub">Upload your Voucher PDF here</div>
         <input type="file" id="fileInput" accept="application/pdf">
       </div>
       <div class="upload-note">
-        <strong>Sign列を自動検出します</strong><br>
-        PDFを読み込むと、表のSign列にある空白セルを自動で検出し、各クルーのサイン欄を表示します。
+        <strong>Sign column is detected automatically</strong><br>
+        The app will scan the PDF and find each crew member's Sign cell.
       </div>
-      <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
+      <button class="ra-back" onclick="backToModeSelect()">← Back to Mode Select</button>
     </div>
 
-    <!-- バージョン履歴 -->
+    <!-- Version History -->
     <div class="version-card">
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
-          <span class="version-title">&#128221; バージョン履歴</span>
+          <span class="version-title">&#128221; Version History</span>
           <span class="version-current">v2.0</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
@@ -214,8 +214,8 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
             <span class="ver-tag new">新機能</span>
           </div>
           <ul class="ver-changes">
-            <li>モード選択画面を追加（サインモード／領収書貼付モード）</li>
-            <li>「領収書を貼り付ける」モード：サイン済みVoucher PDFに領収書画像を後から追加可能に</li>
+            <li>モード選択画面を追加（サインモード／Receipt Attach Mode）</li>
+            <li>「Attach Receipt」モード：サイン済みVoucher PDFに領収書画像を後から追加可能に</li>
             <li>クルーテーブル下・Important Notice上の空白に自動配置</li>
           </ul>
         </div>
@@ -241,7 +241,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
             <li>1文字ずつ分割されたPDFのSign列検出に対応（SELENE LEADER等）</li>
             <li>サインボタンが画面外に隠れる問題を修正</li>
             <li>PDF書き込み位置を上に調整</li>
-            <li>バージョン履歴を追加</li>
+            <li>Version Historyを追加</li>
           </ul>
         </div>
         <div class="version-item">
@@ -284,18 +284,18 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     </div>
   </div><!-- /upload-screen -->
 
-  <!-- 領収書貼付モード -->
+  <!-- Receipt Attach Mode -->
   <div class="receipt-attach-screen" id="receiptAttachScreen">
-    <div class="sec-label">🧾 領収書をVoucherに貼り付け</div>
+    <div class="sec-label">🧾 Attach Receipt to Voucher</div>
 
     <!-- Step1: サイン済みVoucher PDF -->
     <div>
-      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― サイン済みVoucher PDF</div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― Signed Voucher PDF</div>
       <div class="ra-box" id="raVoucherBox" style="position:relative;padding-bottom:0;">
         <div id="raVoucherContent">
           <div class="ra-box-icon">📄</div>
-          <div class="ra-box-label">サイン済みPDFを選択</div>
-          <div class="ra-box-sub">signed_voucher.pdf など</div>
+          <div class="ra-box-label">Select Signed PDF</div>
+          <div class="ra-box-sub">e.g. signed_voucher.pdf</div>
           <div id="raVoucherName" class="ra-filename"></div>
         </div>
         <input type="file" id="raVoucherInput" accept="application/pdf"
@@ -305,16 +305,16 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
     <!-- Step2: 領収書 -->
     <div>
-      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― 領収書画像 / PDF</div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― Receipt Image / PDF</div>
       <div class="ra-box" id="raReceiptBox" style="position:relative;padding-bottom:0;">
         <div id="raReceiptContent">
           <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
-          <div class="ra-box-label">領収書を選択</div>
-          <div class="ra-box-sub">JPG / PNG / PDF 対応</div>
+          <div class="ra-box-label">Select Receipt</div>
+          <div class="ra-box-sub">JPG / PNG / PDF supported</div>
           <img id="raReceiptPreview" class="ra-preview" alt="">
           <div id="raReceiptName" class="ra-filename"></div>
         </div>
-        <!-- inputを全面に重ねる（透明・タップ領域最大化）-->
+        <!-- inputを全面に重ねる（透明・Tap領域最大化）-->
         <input type="file" id="raReceiptInput" accept="image/*,application/pdf"
                style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;font-size:16px;">
       </div>
@@ -322,19 +322,19 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
     <!-- 実行ボタン -->
     <button class="ra-dl-btn" id="raDlBtn" onclick="attachReceiptToPDF()">
-      <span>📎</span><span id="raDlBtnText">PDFと領収書を選択してください</span>
+      <span>📎</span><span id="raDlBtnText">PDFとSelect Receiptしてください</span>
     </button>
-    <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
+    <button class="ra-back" onclick="backToModeSelect()">← Back to Mode Select</button>
   </div>
 
   <div class="processing" id="processingScreen">
     <div class="spinner"></div>
-    <div class="proc-label" id="procLabel">PDFを解析中...</div>
+    <div class="proc-label" id="procLabel">Analyzing PDF...</div>
   </div>
 
   <div class="app-screen" id="appScreen">
     <div class="info-strip" id="infoStrip"></div>
-    <div class="sec-label">クルー — タップしてサイン</div>
+    <div class="sec-label">CREW — Tap to Sign</div>
     <div id="crewList"></div>
     <div class="progress-wrap"><div class="progress-fill" id="progFill"></div></div>
     <button class="dl-btn" id="dlBtn" disabled onclick="downloadPDF()">
@@ -345,16 +345,16 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="sec-label">&#129533; 領収書（任意）</div>
       <div class="receipt-box" id="receiptBox" onclick="document.getElementById('receiptInput').click()">
         <div class="receipt-icon">🧾</div>
-        <div class="receipt-label">領収書をタップして追加</div>
-        <div class="receipt-sub">JPG / PNG / PDF対応</div>
+        <div class="receipt-label">Tap to add Receipt</div>
+        <div class="receipt-sub">JPG / PNG / PDF supported</div>
         <input type="file" id="receiptInput" accept="image/*,application/pdf">
       </div>
       <div class="receipt-info">
-        領収書はクルーテーブルの下・Important Noticeの上の空白スペースに自動で配置されます。
+        The receipt will be placed automatically in the blank space below the crew table and above the Important Notice.
       </div>
     </div>
 
-    <button class="reset-btn" onclick="resetApp()">&#8635; 別のPDFを読み込む</button>
+    <button class="reset-btn" onclick="resetApp()">&#8635; Load another PDF</button>
   </div>
 </div>
 
@@ -368,19 +368,19 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="sign-person-name" id="overlayName">—</div>
       <div class="sign-person-rank" id="overlayRank">—</div>
     </div>
-    <div class="sign-tip">✍ 下にサインしてください</div>
+    <div class="sign-tip">✍ Sign below</div>
   </div>
   <div class="sign-canvas-area">
     <div class="canvas-inner" id="canvasInner">
       <canvas id="sigCanvas"></canvas>
       <div class="canvas-ghost" id="canvasGhost">
-        <span class="ghost-icon">✍</span><span>ここにサイン</span>
+        <span class="ghost-icon">✍</span><span>Sign here</span>
       </div>
     </div>
     <div class="sign-btns">
-      <button class="s-btn s-btn-cancel" onclick="closeOverlay()">キャンセル</button>
-      <button class="s-btn s-btn-clear" onclick="clearSig()">クリア</button>
-      <button class="s-btn s-btn-save" id="saveBtn" onclick="saveSig()" disabled>保存する</button>
+      <button class="s-btn s-btn-cancel" onclick="closeOverlay()">Cancel</button>
+      <button class="s-btn s-btn-clear" onclick="clearSig()">Clear</button>
+      <button class="s-btn s-btn-save" id="saveBtn" onclick="saveSig()" disabled>Save</button>
     </div>
   </div>
 </div>
@@ -413,12 +413,12 @@ uploadBox.addEventListener('drop', e=>{
 
 async function loadPDF(file){
   showScreen('processing');
-  setProc('PDFを読み込み中...');
+  setProc('Loading PDF...');
   try{
     const ab=await file.arrayBuffer();
     pdfBytes=new Uint8Array(ab);
 
-    setProc('ページをレンダリング中...');
+    setProc('Rendering page...');
     const pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
     const page=await pdfjsDoc.getPage(1);
 
@@ -437,7 +437,7 @@ async function loadPDF(file){
     // プレビュー画像の実ピクセルサイズを保存（正規化用）
     const imgW=vp.width, imgH=vp.height;
 
-    setProc('Sign列を検出中...');
+    setProc('Detecting Sign column...');
     const content=await page.getTextContent();
 
     // ── テキストアイテムを正規化 ──
@@ -492,7 +492,7 @@ async function loadPDF(file){
     const signHdr=items.find(it=>/^sign$/i.test(it.str))
       || items.find(it=>/sign/i.test(it.str) && it.w < 50 && it.str.length < 10)
       || items.find(it=>/^sign/i.test(it.raw));
-    if(!signHdr) throw new Error('"Sign" 列ヘッダーが見つかりません。\nPDFに "Sign" という列ヘッダーがあるか確認してください。');
+    if(!signHdr) throw new Error('"Sign" column header not found.\nPlease check that the PDF has a "Sign" column.');
 
     const signHdrY=signHdr.y;
 
@@ -533,7 +533,7 @@ async function loadPDF(file){
     if(numItems.length===0){
       // フォールバック：数字が見つからない場合、
       // ヘッダー行の下に均等な行があると仮定
-      throw new Error('クルーの行番号が見つかりません。\nPDFの表に No列（1, 2, 3...）があるか確認してください。');
+      throw new Error('Crew row numbers not found.\nPlease check that the PDF table has a No column (1, 2, 3...).');
     }
 
     // ── 名前列・Rank列を探す ──
@@ -598,15 +598,15 @@ async function loadPDF(file){
 
     sigs={};
     document.getElementById('infoStrip').innerHTML=
-      `<strong>ファイル:</strong> ${escHtml(file.name)}<br>`+
-      `<strong>クルー数:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
-      `<strong>Sign列:</strong> 自動検出済み`;
+      `<strong>File:</strong> ${escHtml(file.name)}<br>`+
+      `<strong>Crew:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
+      `<strong>Sign column:</strong> Auto-detected`;
     document.getElementById('headerSub').textContent=file.name.replace(/\.pdf$/i,'');
     renderList();
     showScreen('app');
 
   }catch(err){
-    alert('PDFの読み込みに失敗しました。\n\n'+err.message);
+    alert('Failed to load PDF.\n\n'+err.message);
     showScreen('upload');
 document.getElementById('receiptInput').addEventListener('change', onReceiptFile);
 
@@ -628,8 +628,8 @@ function showScreen(n){
 function setProc(m){document.getElementById('procLabel').textContent=m;}
 
 function resetApp(){
-  if(!confirm('別のPDFを読み込みますか？\n現在のサインはリセットされます。'))return;
-  pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書をタップして追加</div><div class='receipt-sub'>JPG / PNG / PDF対応</div><input type='file' id='receiptInput' accept='image/*,application/pdf'>`; document.getElementById('receiptInput').addEventListener('change',onReceiptFile);
+  if(!confirm('Load another PDF?\nAll current signatures will be reset.'))return;
+  pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>Tap to add Receipt</div><div class='receipt-sub'>JPG / PNG / PDF supported</div><input type='file' id='receiptInput' accept='image/*,application/pdf'>`; document.getElementById('receiptInput').addEventListener('change',onReceiptFile);
   document.getElementById('fileInput').value='';
   showScreen('upload');
 
@@ -641,17 +641,17 @@ function showSignUpload(){
 function showReceiptAttach(){
   document.getElementById('uploadScreen').style.display='none';
   document.getElementById('receiptAttachScreen').style.display='flex';
-  document.getElementById('headerSub').textContent='領収書貼付モード';
+  document.getElementById('headerSub').textContent='Receipt Attach Mode';
 }
 function backToModeSelect(){
   document.getElementById('modeSelect').style.display='flex';
   document.getElementById('signUploadArea').style.display='none';
   document.getElementById('uploadScreen').style.display='flex';
   document.getElementById('receiptAttachScreen').style.display='none';
-  document.getElementById('headerSub').textContent='PDFをアップロードしてください';
+  document.getElementById('headerSub').textContent='Upload a PDF to get started';
 }
 
-/* ── 領収書貼付モード ── */
+/* ── Receipt Attach Mode ── */
 let raVoucherBytes=null, raReceiptDataURL=null, raReceiptBytes=null, raReceiptMime=null;
 
 document.getElementById('raVoucherInput').addEventListener('change', async e=>{
@@ -699,13 +699,13 @@ function updateRaBtn(){
   const hasReceipt = raReceiptDataURL || raReceiptBytes;
   if(raVoucherBytes && hasReceipt){
     btn.className='ra-dl-btn ready';
-    txt.textContent='領収書を貼り付けてダウンロード';
+    txt.textContent='Attach Receipt & Download';
   } else if(!raVoucherBytes){
     btn.className='ra-dl-btn';
-    txt.textContent='STEP1: サイン済みPDFを選択してください';
+    txt.textContent='STEP1: Select Signed PDFしてください';
   } else {
     btn.className='ra-dl-btn';
-    txt.textContent='STEP2: 領収書を選択してください';
+    txt.textContent='STEP2: Select Receiptしてください';
   }
 }
 
@@ -714,7 +714,7 @@ async function attachReceiptToPDF(){
   if(!raVoucherBytes || !hasReceipt) return;
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
-  btn.className='ra-dl-btn'; txt.textContent='処理中...'; 
+  btn.className='ra-dl-btn'; txt.textContent='Processing...'; 
 
   try{
     const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
@@ -791,13 +791,13 @@ async function attachReceiptToPDF(){
     a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
     URL.revokeObjectURL(url);
 
-    txt.textContent='ダウンロード完了 ✓';
+    txt.textContent='Download Complete ✓';
     btn.className='ra-dl-btn ready';
-    setTimeout(()=>{ txt.textContent='領収書を貼り付けてダウンロード'; },3000);
+    setTimeout(()=>{ txt.textContent='Attach Receipt & Download'; },3000);
 
   }catch(err){
     console.error(err);
-    txt.textContent='エラーが発生しました';
+    txt.textContent='An error occurred';
     btn.className='ra-dl-btn ready';
   }
 }
@@ -828,7 +828,7 @@ function renderList(){
       </div>
       <div class="crew-right">
         ${d?`<img class="crew-sig-thumb" src="${sigs[c.no]}" alt="sign">`:''}
-        <span class="status-chip ${d?'done':'tap'}">${d?'✓ 完了':'タップ'}</span>
+        <span class="status-chip ${d?'done':'tap'}">${d?'✓ Done':'Tap'}</span>
       </div>`;
     list.appendChild(div);
   });
@@ -838,10 +838,10 @@ function renderList(){
   const dlBtn=document.getElementById('dlBtn'),dlTxt=document.getElementById('dlBtnText');
   if(done===total&&total>0){
     dlBtn.disabled=false; dlBtn.className='dl-btn ready';
-    dlTxt.textContent='サイン済みPDFをダウンロード';
+    dlTxt.textContent='Download Signed PDF';
   }else{
     dlBtn.disabled=true; dlBtn.className='dl-btn';
-    dlTxt.textContent=`あと${total-done}人のサインが必要です`;
+    dlTxt.textContent=`${total-done} more signature(s) needed`;
   }
 }
 
@@ -1057,7 +1057,7 @@ function saveSig(){
 /* ── DOWNLOAD ── */
 async function downloadPDF(){
   const btn=document.getElementById('dlBtn'),txt=document.getElementById('dlBtnText');
-  btn.disabled=true; txt.textContent='生成中...';
+  btn.disabled=true; txt.textContent='Generating...';
   try{
     const doc=await PDFLib.PDFDocument.load(pdfBytes);
     const page=doc.getPages()[0];
@@ -1162,11 +1162,11 @@ async function downloadPDF(){
     const a=document.createElement('a');
     a.href=url; a.download='signed_voucher.pdf'; a.click();
     URL.revokeObjectURL(url);
-    txt.textContent='ダウンロード完了 ✓';
-    setTimeout(()=>{ txt.textContent='サイン済みPDFをダウンロード'; btn.disabled=false; },3000);
+    txt.textContent='Download Complete ✓';
+    setTimeout(()=>{ txt.textContent='Download Signed PDF'; btn.disabled=false; },3000);
   }catch(err){
     console.error(err);
-    txt.textContent='エラーが発生しました'; btn.disabled=false;
+    txt.textContent='An error occurred'; btn.disabled=false;
   }
 }
 
@@ -1196,7 +1196,7 @@ function removeReceipt(e){
   e.stopPropagation();
   receiptData=null;
   const box=document.getElementById('receiptBox');
-  box.innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書をタップして追加</div><div class='receipt-sub'>JPG / PNG / PDF対応</div><input type='file' id='receiptInput' accept='image/*,application/pdf'>`;
+  box.innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>Tap to add Receipt</div><div class='receipt-sub'>JPG / PNG / PDF supported</div><input type='file' id='receiptInput' accept='image/*,application/pdf'>`;
   document.getElementById('receiptInput').addEventListener('change',onReceiptFile);
 }
 
@@ -1219,17 +1219,17 @@ function showSignUpload(){
 function showReceiptAttach(){
   document.getElementById('uploadScreen').style.display='none';
   document.getElementById('receiptAttachScreen').style.display='flex';
-  document.getElementById('headerSub').textContent='領収書貼付モード';
+  document.getElementById('headerSub').textContent='Receipt Attach Mode';
 }
 function backToModeSelect(){
   document.getElementById('modeSelect').style.display='flex';
   document.getElementById('signUploadArea').style.display='none';
   document.getElementById('uploadScreen').style.display='flex';
   document.getElementById('receiptAttachScreen').style.display='none';
-  document.getElementById('headerSub').textContent='PDFをアップロードしてください';
+  document.getElementById('headerSub').textContent='Upload a PDF to get started';
 }
 
-/* ── 領収書貼付モード ── */
+/* ── Receipt Attach Mode ── */
 let raVoucherBytes=null, raReceiptDataURL=null;
 
 document.getElementById('raVoucherInput').addEventListener('change', async e=>{
@@ -1251,13 +1251,13 @@ function updateRaBtn(){
   const hasReceipt = raReceiptDataURL || raReceiptBytes;
   if(raVoucherBytes && hasReceipt){
     btn.className='ra-dl-btn ready';
-    txt.textContent='領収書を貼り付けてダウンロード';
+    txt.textContent='Attach Receipt & Download';
   } else if(!raVoucherBytes){
     btn.className='ra-dl-btn';
-    txt.textContent='STEP1: サイン済みPDFを選択してください';
+    txt.textContent='STEP1: Select Signed PDFしてください';
   } else {
     btn.className='ra-dl-btn';
-    txt.textContent='STEP2: 領収書を選択してください';
+    txt.textContent='STEP2: Select Receiptしてください';
   }
 }
 
@@ -1266,7 +1266,7 @@ async function attachReceiptToPDF(){
   if(!raVoucherBytes || !hasReceipt) return;
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
-  btn.className='ra-dl-btn'; txt.textContent='処理中...'; 
+  btn.className='ra-dl-btn'; txt.textContent='Processing...'; 
 
   try{
     const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
@@ -1343,13 +1343,13 @@ async function attachReceiptToPDF(){
     a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
     URL.revokeObjectURL(url);
 
-    txt.textContent='ダウンロード完了 ✓';
+    txt.textContent='Download Complete ✓';
     btn.className='ra-dl-btn ready';
-    setTimeout(()=>{ txt.textContent='領収書を貼り付けてダウンロード'; },3000);
+    setTimeout(()=>{ txt.textContent='Attach Receipt & Download'; },3000);
 
   }catch(err){
     console.error(err);
-    txt.textContent='エラーが発生しました';
+    txt.textContent='An error occurred';
     btn.className='ra-dl-btn ready';
   }
 }
