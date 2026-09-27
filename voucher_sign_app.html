@@ -184,12 +184,13 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
     <!-- サインモード：PDFアップロード -->
     <div id="signUploadArea" style="display:none;flex-direction:column;gap:12px;">
-      <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
+      <label for="fileInput" class="upload-box" id="uploadBox" style="cursor:pointer;display:block;">
         <div class="upload-icon">📄</div>
         <div class="upload-label">Tap to select PDF</div>
         <div class="upload-sub">Upload your Voucher PDF here</div>
-        <input type="file" id="fileInput" accept="application/pdf">
-      </div>
+        <input type="file" id="fileInput" accept="application/pdf"
+               style="clip:rect(0,0,0,0);position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;">
+      </label>
       <div class="upload-note">
         <strong>Sign column is detected automatically</strong><br>
         The app will scan the PDF and find each crew member's Sign cell.
@@ -202,16 +203,27 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; Version History</span>
-          <span class="version-current">v2.0</span>
+          <span class="version-current">v2.1</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
         <div class="version-item">
           <div class="version-item-header">
+            <span class="ver-num">v2.1</span>
+            <span class="ver-date">2026/09/27</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>iPhone Safari でファイル選択ボタンが反応しない問題を修正（全ファイル入力を label 方式に変更）</li>
+            <li>Collect Signatures / Attach Receipt 両モードのアップロードボタンをタップ可能な「Choose File」ボタンに改善</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
             <span class="ver-num">v2.0</span>
             <span class="ver-date">2026/09/25</span>
-            <span class="ver-tag new">新機能</span>
+            <span class="ver-tag new">New</span>
           </div>
           <ul class="ver-changes">
             <li>モード選択画面を追加（サインモード／Receipt Attach Mode）</li>
@@ -223,7 +235,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="version-item-header">
             <span class="ver-num">v1.9</span>
             <span class="ver-date">2026/09/25</span>
-            <span class="ver-tag new">新機能</span>
+            <span class="ver-tag new">New</span>
           </div>
           <ul class="ver-changes">
             <li>領収書（JPG/PNG）をVoucherの空白スペースに自動貼付する機能を追加</li>
@@ -235,7 +247,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="version-item-header">
             <span class="ver-num">v1.8</span>
             <span class="ver-date">2026/09/04</span>
-            <span class="ver-tag fix">改善</span>
+            <span class="ver-tag fix">Fix</span>
           </div>
           <ul class="ver-changes">
             <li>1文字ずつ分割されたPDFのSign列検出に対応（SELENE LEADER等）</li>
@@ -248,7 +260,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="version-item-header">
             <span class="ver-num">v1.7</span>
             <span class="ver-date">2026/08/30</span>
-            <span class="ver-tag fix">改善</span>
+            <span class="ver-tag fix">Fix</span>
           </div>
           <ul class="ver-changes">
             <li>サイン保存時にキャンバス全体ではなく描画範囲のみをクロップしてPDFに貼付</li>
@@ -260,7 +272,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="version-item-header">
             <span class="ver-num">v1.6</span>
             <span class="ver-date">2026/08/30</span>
-            <span class="ver-tag fix">改善</span>
+            <span class="ver-tag fix">Fix</span>
           </div>
           <ul class="ver-changes">
             <li>サインの線をCatmull-Romスプラインで滑らかに描画</li>
@@ -272,7 +284,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="version-item-header">
             <span class="ver-num">v1.5</span>
             <span class="ver-date">2026/08/30</span>
-            <span class="ver-tag new">新機能</span>
+            <span class="ver-tag new">New</span>
           </div>
           <ul class="ver-changes">
             <li>PDFアップロード機能を追加（毎回PDFを選択可能に）</li>
@@ -291,38 +303,40 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <!-- Step1: サイン済みVoucher PDF -->
     <div>
       <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― Signed Voucher PDF</div>
-      <div class="ra-box" id="raVoucherBox" style="position:relative;padding-bottom:0;">
-        <div id="raVoucherContent">
-          <div class="ra-box-icon">📄</div>
-          <div class="ra-box-label">Select Signed PDF</div>
-          <div class="ra-box-sub">e.g. signed_voucher.pdf</div>
-          <div id="raVoucherName" class="ra-filename"></div>
-        </div>
+      <div class="ra-box" id="raVoucherBox">
+        <div class="ra-box-icon">📄</div>
+        <div class="ra-box-label">Select Signed PDF</div>
+        <div class="ra-box-sub">e.g. signed_voucher.pdf</div>
+        <div id="raVoucherName" class="ra-filename"></div>
+        <label for="raVoucherInput" style="display:block;margin-top:14px;padding:13px 0;background:#0ea5e9;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;text-align:center;-webkit-tap-highlight-color:rgba(0,0,0,0.1);">
+          📄 Choose PDF
+        </label>
         <input type="file" id="raVoucherInput" accept="application/pdf"
-               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;font-size:16px;">
+               style="clip:rect(0,0,0,0);position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;">
       </div>
     </div>
 
     <!-- Step2: 領収書 -->
     <div>
       <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― Receipt Image / PDF</div>
-      <div class="ra-box" id="raReceiptBox" style="position:relative;padding-bottom:0;">
-        <div id="raReceiptContent">
-          <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
-          <div class="ra-box-label">Select Receipt</div>
-          <div class="ra-box-sub">JPG / PNG / PDF supported</div>
-          <img id="raReceiptPreview" class="ra-preview" alt="">
-          <div id="raReceiptName" class="ra-filename"></div>
-        </div>
-        <!-- inputを全面に重ねる（透明・Tap領域最大化）-->
+      <div class="ra-box" id="raReceiptBox">
+        <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
+        <div class="ra-box-label">Select Receipt</div>
+        <div class="ra-box-sub">JPG / PNG / PDF supported</div>
+        <img id="raReceiptPreview" class="ra-preview" alt="">
+        <div id="raReceiptName" class="ra-filename"></div>
+        <!-- iOS Safari対応: labelでinputを囲む。inputはdisplay:noneにしない（clip方式）-->
+        <label for="raReceiptInput" style="display:block;margin-top:14px;padding:13px 0;background:#f59e0b;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;text-align:center;-webkit-tap-highlight-color:rgba(0,0,0,0.1);">
+          📂 Choose File
+        </label>
         <input type="file" id="raReceiptInput" accept="image/*,application/pdf"
-               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;font-size:16px;">
+               style="clip:rect(0,0,0,0);position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;">
       </div>
     </div>
 
     <!-- 実行ボタン -->
     <button class="ra-dl-btn" id="raDlBtn" onclick="attachReceiptToPDF()">
-      <span>📎</span><span id="raDlBtnText">PDFとSelect Receiptしてください</span>
+      <span>📎</span><span id="raDlBtnText">Please select PDF and Receipt</span>
     </button>
     <button class="ra-back" onclick="backToModeSelect()">← Back to Mode Select</button>
   </div>
@@ -338,11 +352,11 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <div id="crewList"></div>
     <div class="progress-wrap"><div class="progress-fill" id="progFill"></div></div>
     <button class="dl-btn" id="dlBtn" disabled onclick="downloadPDF()">
-      <span>📄</span><span id="dlBtnText">サインを集めてください</span>
+      <span>📄</span><span id="dlBtnText">Collect signatures</span>
     </button>
     <!-- 領収書セクション -->
     <div class="receipt-section" id="receiptSection">
-      <div class="sec-label">&#129533; 領収書（任意）</div>
+      <div class="sec-label">🧾 Receipt (Optional)</div>
       <div class="receipt-box" id="receiptBox" onclick="document.getElementById('receiptInput').click()">
         <div class="receipt-icon">🧾</div>
         <div class="receipt-label">Tap to add Receipt</div>
