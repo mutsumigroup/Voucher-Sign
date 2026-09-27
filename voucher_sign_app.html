@@ -632,8 +632,6 @@ function toggleVersion(){
   body.classList.toggle('open');
   arrow.classList.toggle('open');
 }
-  }
-}
 
 function showScreen(n){
   document.getElementById('uploadScreen').style.display    = n==='upload'     ?'flex':'none';
@@ -817,14 +815,6 @@ async function attachReceiptToPDF(){
     txt.textContent='An error occurred';
     btn.className='ra-dl-btn ready';
   }
-}
-
-function toggleVersion(){
-  const body=document.getElementById('versionBody');
-  const arrow=document.getElementById('versionArrow');
-  body.classList.toggle('open');
-  arrow.classList.toggle('open');
-}
 }
 
 /* ── CREW LIST ── */
@@ -1357,12 +1347,7 @@ async function attachReceiptToPDF(){
   }
 }
 
-function toggleVersion(){
-  const body=document.getElementById('versionBody');
-  const arrow=document.getElementById('versionArrow');
-  body.classList.toggle('open');
-  arrow.classList.toggle('open');
-}
+
 </script>
 </body>
 </html>
