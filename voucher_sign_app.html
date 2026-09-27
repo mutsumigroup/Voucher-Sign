@@ -646,6 +646,7 @@ function resetApp(){
   pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>Tap to add Receipt</div><div class='receipt-sub'>JPG / PNG / PDF supported</div><label for='receiptInput' style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;'>📂 Choose File</label><input type='file' id='receiptInput' accept='image/*,application/pdf' style='display:none;'>`;
   document.getElementById('fileInput').value='';
   showScreen('upload');
+}
 
 /* ── モード切替 ── */
 function showSignUpload(){
@@ -1219,134 +1220,6 @@ function escHtml(s){
 }
 
 showScreen('upload');
-
-/* ── モード切替 ── */
-function showSignUpload(){
-  document.getElementById('modeSelect').style.display='none';
-  document.getElementById('signUploadArea').style.display='flex';
-}
-function showReceiptAttach(){
-  document.getElementById('uploadScreen').style.display='none';
-  document.getElementById('receiptAttachScreen').style.display='flex';
-  document.getElementById('headerSub').textContent='Receipt Attach Mode';
-}
-function backToModeSelect(){
-  document.getElementById('modeSelect').style.display='flex';
-  document.getElementById('signUploadArea').style.display='none';
-  document.getElementById('uploadScreen').style.display='flex';
-  document.getElementById('receiptAttachScreen').style.display='none';
-  document.getElementById('headerSub').textContent='Upload a PDF to get started';
-}
-
-function updateRaBtn(){
-  const btn=document.getElementById('raDlBtn');
-  const txt=document.getElementById('raDlBtnText');
-  const hasReceipt = raReceiptDataURL || raReceiptBytes;
-  if(raVoucherBytes && hasReceipt){
-    btn.className='ra-dl-btn ready';
-    txt.textContent='Attach Receipt & Download';
-  } else if(!raVoucherBytes){
-    btn.className='ra-dl-btn';
-    txt.textContent='STEP1: Select Signed PDFしてください';
-  } else {
-    btn.className='ra-dl-btn';
-    txt.textContent='STEP2: Select Receiptしてください';
-  }
-}
-
-async function attachReceiptToPDF(){
-  const hasReceipt = raReceiptDataURL || raReceiptBytes;
-  if(!raVoucherBytes || !hasReceipt) return;
-  const btn=document.getElementById('raDlBtn');
-  const txt=document.getElementById('raDlBtnText');
-  btn.className='ra-dl-btn'; txt.textContent='Processing...'; 
-
-  try{
-    const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
-    const page=doc.getPages()[0];
-    const {width:W, height:H}=page.getSize();
-
-    // ── 空白スペースを検出（クルーテーブル下〜Important Notice上）──
-    const pdfjsDoc=await pdfjsLib.getDocument({data:raVoucherBytes.slice()}).promise;
-    const pg=await pdfjsDoc.getPage(1);
-    const content=await pg.getTextContent();
-
-    // 全テキストを中心Yでグループ化（先ほどのロジックと同じ）
-    const rawItems2=[];
-    for(const it of content.items){
-      if(!it.str||!it.str.trim()) continue;
-      const tx=it.transform[4], ty=it.transform[5];
-      const h2=Math.abs(it.height)||8;
-      rawItems2.push({x:tx,x1:tx+Math.abs(it.width),yCtr:ty+h2/2,str:it.str,yPDF:ty});
-    }
-    // 数字行の最小Y（PDF左下原点）= テーブル最終行
-    const numYs=rawItems2.filter(i=>/^\d{1,2}$/.test(i.str.trim())&&i.yPDF<H*0.8&&i.yPDF>H*0.1).map(i=>i.yPDF);
-    const tableBottomY = numYs.length>0 ? Math.min(...numYs) - 5 : H*0.6;
-
-    // Important Notice のY（PDF左下原点）
-    const impItems=rawItems2.filter(i=>/important/i.test(i.str)&&i.yPDF<H*0.6);
-    const importantTopY = impItems.length>0 ? Math.max(...impItems.map(i=>i.yPDF+15)) : H*0.25;
-
-    // 空白スペース
-    const margin=12;
-    const spaceBottom = importantTopY + margin;
-    const spaceTop    = tableBottomY - margin;
-    const spaceLeft   = W * 0.07;
-    const spaceRight  = W * 0.93;
-    const spaceW      = spaceRight - spaceLeft;
-    const spaceH      = spaceTop - spaceBottom;
-
-    if(spaceH > 20){
-      // 画像埋め込み
-      const imgB64=raReceiptDataURL.split(',')[1];
-      const mime=raReceiptDataURL.split(';')[0].split(':')[1];
-
-      if(raReceiptBytes){
-        // PDFの場合：ArrayBytesから直接埋め込む
-        const receiptPdfDoc=await PDFLib.PDFDocument.load(raReceiptBytes);
-        const [embPage]=await doc.embedPages([receiptPdfDoc.getPages()[0]]);
-        const embDims=embPage.size();
-        const sc=Math.min(spaceW/embDims.width, spaceH/embDims.height, 1.0);
-        const dw=embDims.width*sc, dh=embDims.height*sc;
-        const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
-        page.drawPage(embPage,{
-          x: spaceLeft+ox, y: spaceBottom+oy,
-          width: dw, height: dh
-        });
-      } else {
-        // 画像（JPG/PNG）の場合
-        let embImg;
-        if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
-        else embImg=await doc.embedJpg(b64ToU8(imgB64));
-        const dims=embImg.scale(1);
-        const sc=Math.min(spaceW/dims.width, spaceH/dims.height, 1.0);
-        const dw=dims.width*sc, dh=dims.height*sc;
-        const ox=(spaceW-dw)/2, oy=(spaceH-dh)/2;
-        page.drawImage(embImg,{
-          x: spaceLeft+ox, y: spaceBottom+oy,
-          width: dw, height: dh
-        });
-      }
-    }
-
-    const out=await doc.save();
-    const blob=new Blob([out],{type:'application/pdf'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
-    URL.revokeObjectURL(url);
-
-    txt.textContent='Download Complete ✓';
-    btn.className='ra-dl-btn ready';
-    setTimeout(()=>{ txt.textContent='Attach Receipt & Download'; },3000);
-
-  }catch(err){
-    console.error(err);
-    txt.textContent='An error occurred';
-    btn.className='ra-dl-btn ready';
-  }
-}
-
 
 </script>
 </body>
