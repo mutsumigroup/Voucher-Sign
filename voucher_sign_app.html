@@ -211,11 +211,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.4</span>
+          <span class="version-current">v2.5</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.5</span>
+            <span class="ver-date">2026/09/30</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>船名検出ロジックを修正（"Name of Vessel:" がpdf.jsで3分割されても確実に取得）</li>
+            <li>ファイル名が「船名_Category_JPY金額」形式（例: ENERGY_HORIZON_Embark_JPY16000.pdf）で正しく生成されるよう修正</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v2.4</span>
@@ -666,44 +677,50 @@ async function loadPDF(file){
 
     sigs={};
 
-    // ── 船名を取得 ──
-    let shipName = '';
-
-    // パターン1：ラベル＋値が同一アイテム内（例："M/V EVER GOLDEN", "Name of Vessel: LILAC PROMENADE"）
+    // ── ページ全テキストを1行ずつY座標でグループ化（検索用） ──
+    // items は上で作成済み（x, y, str, w プロパティを持つ）
+    // Y座標が近いアイテムを同一行としてまとめる
+    const lineMap = new Map();
     for(const it of items){
-      const m = it.str.match(/(?:name\s+of\s+vessel|vessel\s*name|ship\s*name|m\/v|mv|s\.s\.|ss|f\/v|fv)[:\s]+(.+)/i);
-      if(m && m[1].trim().length > 1){ shipName = m[1].trim(); break; }
+      const yKey = Math.round(it.y / 5) * 5; // 5pt単位でグループ化
+      if(!lineMap.has(yKey)) lineMap.set(yKey, []);
+      lineMap.get(yKey).push(it);
     }
+    // 各行をX順にソート済みの配列にする
+    const lines = [...lineMap.values()].map(row => row.sort((a,b)=>a.x-b.x));
 
-    // パターン2：ラベルと値が別アイテム（最も多いケース）
-    // 「Name of Vessel:」の右側・同じ行にある最初のテキストを船名とする
-    if(!shipName){
-      // ラベルアイテムを特定（コロンあり/なし両対応、部分一致）
-      const labelItem = items.find(it=>
-        /name\s+of\s+vessel|vessel\s*name|ship\s*name/i.test(it.str)
-      );
-      if(labelItem){
-        const lY = labelItem.y;
-        const lX = labelItem.x + labelItem.w; // ラベルの右端
-        // 同じ行（Y±15pt）でラベルより右にある全アイテムを連結
-        const valueItems = items
-          .filter(it=>
-            it !== labelItem &&
-            Math.abs(it.y - lY) < 15 &&
-            it.x >= lX - 5 &&
-            it.str.trim().length > 0
-          )
-          .sort((a,b)=>a.x-b.x);
-        if(valueItems.length > 0){
-          // 連続するアイテムを結合（間にコロンや空白が入る場合も考慮）
-          shipName = valueItems.map(it=>it.str.trim()).join(' ')
-            .replace(/^[:\s]+/,'')  // 先頭のコロン・スペース除去
-            .trim();
+    // ── ヘルパー: ラベルと同じ行の値を取得 ──
+    const getValueOnSameLine = (labelPattern, firstWordOnly=false) => {
+      for(const line of lines){
+        const labelIdx = line.findIndex(it => labelPattern.test(it.str));
+        if(labelIdx >= 0 && labelIdx < line.length - 1){
+          const rest = line.slice(labelIdx + 1);
+          if(firstWordOnly){
+            // 純粋な英字のみのワードを先頭から1つ取得（数字・記号混在は除外）
+            for(const it of rest){
+              const word = it.str.trim().replace(/[:\s]+$/,'');
+              if(/^[A-Za-z]+$/.test(word)) return word;
+            }
+            return rest[0].str.trim();
+          }
+          return rest.map(it=>it.str.trim()).join(' ').replace(/^[:\s]+/,'').trim();
         }
       }
-    }
+      return '';
+    };
 
-    // パターン3：M/V プレフィックスが独立アイテム
+    // ── 船名を取得（"Vessel:" ラベルの右側から取得） ──
+    // pdf.jsは "Name of Vessel:" を3つの別アイテムに分割するため、
+    // 最後のワード "Vessel:" だけをマッチさせる
+    let shipName = getValueOnSameLine(/vessel:/i);
+    // フォールバック: "M/V SHIPNAME" パターン（"Vessel:" が見つからない場合）
+    if(!shipName){
+      for(const it of items){
+        const m = it.str.match(/(?:m\/v|mv|s\.s\.|ss|f\/v|fv)[:\s]+(.+)/i);
+        if(m && m[1].trim().length > 1){ shipName = m[1].trim(); break; }
+      }
+    }
+    // フォールバック2: M/V プレフィックスが独立アイテム
     if(!shipName){
       const mvItem = items.find(it=> /^(?:m\/v|mv|s\.s\.|ss)$/i.test(it.str.trim()));
       if(mvItem){
@@ -719,67 +736,36 @@ async function loadPDF(file){
       }
     }
 
-    // ── Category（Embark / Disembark など）を検出 ──
-    let category = '';
-    const catLabelItem = items.find(it => /category/i.test(it.str));
-    if(catLabelItem){
-      const catY = catLabelItem.y;
-      const catX = catLabelItem.x + catLabelItem.w;
-      const catValueItems = items
-        .filter(it =>
-          it !== catLabelItem &&
-          Math.abs(it.y - catY) < 15 &&
-          it.x >= catX - 5 &&
-          it.str.trim().length > 0
-        )
-        .sort((a,b) => a.x - b.x);
-      if(catValueItems.length > 0){
-        category = catValueItems.map(it => it.str.trim()).join(' ')
-          .replace(/^[:\s]+/,'').trim();
-      }
-    }
+    // ── Category検出（"Embark"など最初の英語ワードのみ／NH872等の便名は除外） ──
+    let category = getValueOnSameLine(/category/i, true);
+    // 同一アイテム内パターン（"Category: Embark"）
     if(!category){
       for(const it of items){
-        const m = it.str.match(/category[:\s]+(.+)/i);
-        if(m && m[1].trim().length > 0){ category = m[1].trim(); break; }
+        const m = it.str.match(/category[:\s]+([A-Za-z]+)/i);
+        if(m && m[1].trim()){ category = m[1].trim(); break; }
       }
     }
 
-    // ── Meal allowance Total JPY金額を検出 ──
-    // "Meal allowance :Total JPY 16,000//" のような行から金額を取得
+    // ── Meal allowance Total JPY金額検出 ──
+    // 行内に "Total" と "JPY" と数字がある行を探す
     let mealTotal = '';
-    // "Total" と "JPY" が同じY座標付近にある行を探す
-    const totalItem = items.find(it => /total/i.test(it.str) && items.some(
-      jpy => /^jpy$/i.test(jpy.str.trim()) && Math.abs(jpy.y - it.y) < 15 && jpy.x > it.x
-    ));
-    if(totalItem){
-      const tY = totalItem.y;
-      // 同じ行のJPYアイテムを探す
-      const jpyItem = items.find(it =>
-        /^jpy$/i.test(it.str.trim()) &&
-        Math.abs(it.y - tY) < 15 &&
-        it.x > totalItem.x
-      );
-      if(jpyItem){
-        // JPYの直後の数字アイテムを取得
-        const amtItem = items
-          .filter(it =>
-            Math.abs(it.y - tY) < 15 &&
-            it.x > jpyItem.x &&
-            /[\d,]/.test(it.str)
-          )
-          .sort((a,b) => a.x - b.x)[0];
-        if(amtItem){
-          // 数字とカンマだけ抽出（"//"などは除去）
-          mealTotal = 'JPY' + amtItem.str.replace(/[^0-9,]/g,'');
+    for(const line of lines){
+      const lineStr = line.map(it=>it.str).join(' ');
+      // "Total JPY 16,000" パターン
+      if(/total/i.test(lineStr) && /jpy/i.test(lineStr)){
+        // JPYアイテムの直後の数字アイテムを取得
+        const jpyIdx = line.findIndex(it => /^jpy$/i.test(it.str.trim()));
+        if(jpyIdx >= 0 && jpyIdx < line.length - 1){
+          // JPY直後のアイテムから数字を抽出
+          const numStr = line[jpyIdx + 1].str.replace(/[^0-9,]/g,'');
+          if(numStr){ mealTotal = 'JPY' + numStr.replace(/,/g,''); break; }
         }
-      }
-    }
-    // フォールバック: "JPY 16,000" パターンをテキスト全体から検索
-    if(!mealTotal){
-      for(const it of items){
-        const m = it.str.match(/jpy[\s]*([\d,]+)/i);
-        if(m){ mealTotal = 'JPY' + m[1].replace(/,/g,'').replace(/[^0-9]/g,''); break; }
+        // JPYと数字が同一アイテムのケース: "JPY16,000"
+        for(const it of line){
+          const m = it.str.match(/jpy\s*([\d,]+)/i);
+          if(m){ mealTotal = 'JPY' + m[1].replace(/,/g,''); break; }
+        }
+        if(mealTotal) break;
       }
     }
 
