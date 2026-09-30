@@ -75,7 +75,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .receipt-preview img{width:100%;display:block;max-height:160px;object-fit:contain;}
 .receipt-remove{position:absolute;top:6px;right:6px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;}
 .receipt-info{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;font-size:11px;color:#92400e;margin-top:6px;line-height:1.6;}
-#receiptInput{display:none;}
+/* #receiptInput は label内に置きopacityで隠す */
 .version-card{background:var(--surface-2,#fff);border:0.5px solid var(--border,#d1dce8);border-radius:10px;overflow:hidden;margin-top:4px;}
 .version-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;-webkit-user-select:none;user-select:none;}
 .version-header-left{display:flex;align-items:center;gap:8px;}
@@ -147,6 +147,15 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .ra-dl-btn.ready:active{opacity:.85;}
 .ra-back{background:none;border:1.5px solid var(--border,#d1dce8);border-radius:10px;padding:10px;width:100%;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;}
 .ra-back:active{opacity:.7;}
+
+/* ── Filename editor ── */
+.filename-editor{display:none;background:#f8fafc;border:1.5px solid #d1dce8;border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+.filename-editor.visible{display:block;}
+.filename-editor-label{font-size:11px;font-weight:700;color:#64748b;margin-bottom:4px;letter-spacing:.5px;}
+.filename-input-row{display:flex;align-items:center;gap:6px;}
+.filename-input{flex:1;border:1.5px solid #d1dce8;border-radius:8px;padding:9px 10px;font-size:14px;font-weight:600;color:#1e293b;background:#fff;outline:none;min-width:0;}
+.filename-input:focus{border-color:#0ea5e9;}
+.filename-ext{font-size:13px;font-weight:700;color:#64748b;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -155,7 +164,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   <div class="header-icon">&#9875;</div>
   <div class="header-text">
     <div class="header-title">Voucher Sign</div>
-    <div class="header-sub" id="headerSub">Upload a PDF to get started</div>
+    <div class="header-sub" id="headerSub">PDFをアップロードして開始</div>
   </div>
   <div class="header-badge" id="headerBadge" style="display:none;">0 / 0</div>
 </div>
@@ -165,19 +174,19 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
     <!-- モード選択 -->
     <div class="mode-select" id="modeSelect">
-      <div class="mode-label">SELECT MODE</div>
+      <div class="mode-label">モードを選択</div>
       <div class="mode-btn sign-mode" onclick="showSignUpload()">
         <div class="mode-btn-icon">✍️</div>
         <div class="mode-btn-text">
-          <div class="mode-btn-title">Collect Signatures</div>
-          <div class="mode-btn-sub">Upload a Voucher PDF and collect crew signatures</div>
+          <div class="mode-btn-title">サイン収集</div>
+          <div class="mode-btn-sub">Voucher PDFをアップロードしてクルーのサインを収集</div>
         </div>
       </div>
       <div class="mode-btn receipt-mode" onclick="showReceiptAttach()">
         <div class="mode-btn-icon">🧾</div>
         <div class="mode-btn-text">
-          <div class="mode-btn-title">Attach Receipt</div>
-          <div class="mode-btn-sub">Add a receipt to a signed Voucher PDF</div>
+          <div class="mode-btn-title">領収書添付</div>
+          <div class="mode-btn-sub">サイン済みVoucher PDFに領収書を追加</div>
         </div>
       </div>
     </div>
@@ -186,22 +195,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <div id="signUploadArea" style="display:none;flex-direction:column;gap:12px;">
       <label for="fileInput" class="upload-box" id="uploadBox" style="cursor:pointer;display:block;">
         <div class="upload-icon">📄</div>
-        <div class="upload-label">Tap to select PDF</div>
-        <div class="upload-sub">Upload your Voucher PDF here</div>
+        <div class="upload-label">タップしてPDFを選択</div>
+        <div class="upload-sub">Voucher PDFをここにアップロード</div>
         <input type="file" id="fileInput" accept="application/pdf">
       </label>
       <div class="upload-note">
-        <strong>Sign column is detected automatically</strong><br>
-        The app will scan the PDF and find each crew member's Sign cell.
+        <strong>Sign列を自動検出</strong><br>
+        PDFをスキャンして各クルーのサイン欄を自動で見つけます。
       </div>
-      <button class="ra-back" onclick="backToModeSelect()">← Back to Mode Select</button>
+      <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
     </div>
 
     <!-- Version History -->
     <div class="version-card">
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
-          <span class="version-title">&#128221; Version History</span>
+          <span class="version-title">&#128221; バージョン履歴</span>
           <span class="version-current">v2.1</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
@@ -297,47 +306,48 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
   <!-- Receipt Attach Mode -->
   <div class="receipt-attach-screen" id="receiptAttachScreen">
-    <div class="sec-label">🧾 Attach Receipt to Voucher</div>
+    <div class="sec-label">🧾 Voucherに領収書を添付</div>
 
     <!-- Step1: サイン済みVoucher PDF -->
     <div>
-      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― Signed Voucher PDF</div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 1 ― サイン済みVoucher PDF</div>
       <div class="ra-box" id="raVoucherBox">
         <div class="ra-box-icon">📄</div>
-        <div class="ra-box-label">Select Signed PDF</div>
-        <div class="ra-box-sub">e.g. signed_voucher.pdf</div>
+        <div class="ra-box-label">サイン済みPDFを選択</div>
+        <div class="ra-box-sub">例：signed_voucher.pdf</div>
         <div id="raVoucherName" class="ra-filename"></div>
-        <label for="raVoucherInput" style="display:block;margin-top:14px;padding:13px 0;background:#0ea5e9;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;text-align:center;-webkit-tap-highlight-color:rgba(0,0,0,0.1);">
+        <!-- iOS Safari: inputをlabel内に置きopacityで隠す（display:noneはNG） -->
+        <label style="display:block;margin-top:14px;padding:13px 0;background:#0ea5e9;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;text-align:center;-webkit-tap-highlight-color:rgba(0,0,0,0.1);position:relative;overflow:hidden;">
           📄 Choose PDF
+          <input type="file" id="raVoucherInput" accept="application/pdf"
+                 style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;">
         </label>
-        <input type="file" id="raVoucherInput" accept="application/pdf"
-               style="display:none;">
       </div>
     </div>
 
     <!-- Step2: 領収書 -->
     <div>
-      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― Receipt Image / PDF</div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">STEP 2 ― 領収書（画像またはPDF）</div>
       <div class="ra-box" id="raReceiptBox">
         <div class="ra-box-icon" id="raReceiptIcon">🧾</div>
-        <div class="ra-box-label">Select Receipt</div>
-        <div class="ra-box-sub">JPG / PNG / PDF supported</div>
+        <div class="ra-box-label">領収書を選択</div>
+        <div class="ra-box-sub">JPG / PNG / PDF 対応</div>
         <img id="raReceiptPreview" class="ra-preview" alt="">
         <div id="raReceiptName" class="ra-filename"></div>
-        <!-- iOS Safari対応: labelでinputを囲む。inputはdisplay:noneにしない（clip方式）-->
-        <label for="raReceiptInput" style="display:block;margin-top:14px;padding:13px 0;background:#f59e0b;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;text-align:center;-webkit-tap-highlight-color:rgba(0,0,0,0.1);">
+        <!-- iOS Safari: inputをlabel内に置きopacityで隠す（display:noneはNG） -->
+        <label style="display:block;margin-top:14px;padding:13px 0;background:#f59e0b;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;text-align:center;-webkit-tap-highlight-color:rgba(0,0,0,0.1);position:relative;overflow:hidden;">
           📂 Choose File
+          <input type="file" id="raReceiptInput" accept="image/*,application/pdf"
+                 style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;">
         </label>
-        <input type="file" id="raReceiptInput" accept="image/*,application/pdf"
-               style="display:none;">
       </div>
     </div>
 
     <!-- 実行ボタン -->
     <button class="ra-dl-btn" id="raDlBtn" onclick="attachReceiptToPDF()">
-      <span>📎</span><span id="raDlBtnText">Please select PDF and Receipt</span>
+      <span>📎</span><span id="raDlBtnText">PDFと領収書を選択してください</span>
     </button>
-    <button class="ra-back" onclick="backToModeSelect()">← Back to Mode Select</button>
+    <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
   </div>
 
   <div class="processing" id="processingScreen">
@@ -347,28 +357,37 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
   <div class="app-screen" id="appScreen">
     <div class="info-strip" id="infoStrip"></div>
-    <div class="sec-label">CREW — Tap to Sign</div>
+    <div class="sec-label">クルー一覧 — タップしてサイン</div>
     <div id="crewList"></div>
     <div class="progress-wrap"><div class="progress-fill" id="progFill"></div></div>
+    <div class="filename-editor" id="filenameEditor">
+      <div class="filename-editor-label">保存ファイル名</div>
+      <div class="filename-input-row">
+        <input type="text" class="filename-input" id="filenameInput" placeholder="signed_voucher" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <span class="filename-ext">.pdf</span>
+      </div>
+    </div>
     <button class="dl-btn" id="dlBtn" disabled onclick="downloadPDF()">
-      <span>📄</span><span id="dlBtnText">Collect signatures</span>
+      <span>📄</span><span id="dlBtnText">サインを収集してください</span>
     </button>
     <!-- 領収書セクション -->
     <div class="receipt-section" id="receiptSection">
-      <div class="sec-label">🧾 Receipt (Optional)</div>
+      <div class="sec-label">🧾 領収書（任意）</div>
       <div class="receipt-box" id="receiptBox">
         <div class="receipt-icon">🧾</div>
-        <div class="receipt-label">Tap to add Receipt</div>
-        <div class="receipt-sub">JPG / PNG / PDF supported</div>
-        <label for="receiptInput" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">📂 Choose File</label>
-        <input type="file" id="receiptInput" accept="image/*,application/pdf" style="display:none;">
+        <div class="receipt-label">領収書を追加</div>
+        <div class="receipt-sub">JPG / PNG / PDF 対応</div>
+        <label style="display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;">
+          📂 Choose File
+          <input type="file" id="receiptInput" accept="image/*,application/pdf" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;">
+        </label>
       </div>
       <div class="receipt-info">
-        The receipt will be placed automatically in the blank space below the crew table and above the Important Notice.
+        クルーテーブル下のスペースに領収書が自動配置されます。
       </div>
     </div>
 
-    <button class="reset-btn" onclick="resetApp()">&#8635; Load another PDF</button>
+    <button class="reset-btn" onclick="resetApp()">&#8635; 別のPDFを読み込む</button>
   </div>
 </div>
 
@@ -428,12 +447,12 @@ uploadBox.addEventListener('drop', e=>{
 
 async function loadPDF(file){
   showScreen('processing');
-  setProc('Loading PDF...');
+  setProc('PDFを読み込み中...');
   try{
     const ab=await file.arrayBuffer();
     pdfBytes=new Uint8Array(ab);
 
-    setProc('Rendering page...');
+    setProc('ページをレンダリング中...');
     const pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
     const page=await pdfjsDoc.getPage(1);
 
@@ -452,7 +471,7 @@ async function loadPDF(file){
     // プレビュー画像の実ピクセルサイズを保存（正規化用）
     const imgW=vp.width, imgH=vp.height;
 
-    setProc('Detecting Sign column...');
+    setProc('Sign列を検出中...');
     const content=await page.getTextContent();
 
     // ── テキストアイテムを正規化 ──
@@ -612,16 +631,80 @@ async function loadPDF(file){
     }
 
     sigs={};
+
+    // ── 船名を取得 ──
+    let shipName = '';
+
+    // パターン1：ラベル＋値が同一アイテム内（例："M/V EVER GOLDEN", "Name of Vessel: LILAC PROMENADE"）
+    for(const it of items){
+      const m = it.str.match(/(?:name\s+of\s+vessel|vessel\s*name|ship\s*name|m\/v|mv|s\.s\.|ss|f\/v|fv)[:\s]+(.+)/i);
+      if(m && m[1].trim().length > 1){ shipName = m[1].trim(); break; }
+    }
+
+    // パターン2：ラベルと値が別アイテム（最も多いケース）
+    // 「Name of Vessel:」の右側・同じ行にある最初のテキストを船名とする
+    if(!shipName){
+      // ラベルアイテムを特定（コロンあり/なし両対応、部分一致）
+      const labelItem = items.find(it=>
+        /name\s+of\s+vessel|vessel\s*name|ship\s*name/i.test(it.str)
+      );
+      if(labelItem){
+        const lY = labelItem.y;
+        const lX = labelItem.x + labelItem.w; // ラベルの右端
+        // 同じ行（Y±15pt）でラベルより右にある全アイテムを連結
+        const valueItems = items
+          .filter(it=>
+            it !== labelItem &&
+            Math.abs(it.y - lY) < 15 &&
+            it.x >= lX - 5 &&
+            it.str.trim().length > 0
+          )
+          .sort((a,b)=>a.x-b.x);
+        if(valueItems.length > 0){
+          // 連続するアイテムを結合（間にコロンや空白が入る場合も考慮）
+          shipName = valueItems.map(it=>it.str.trim()).join(' ')
+            .replace(/^[:\s]+/,'')  // 先頭のコロン・スペース除去
+            .trim();
+        }
+      }
+    }
+
+    // パターン3：M/V プレフィックスが独立アイテム
+    if(!shipName){
+      const mvItem = items.find(it=> /^(?:m\/v|mv|s\.s\.|ss)$/i.test(it.str.trim()));
+      if(mvItem){
+        const nearby = items
+          .filter(it=>
+            it !== mvItem &&
+            Math.abs(it.y - mvItem.y) < 12 &&
+            it.x > mvItem.x &&
+            it.str.trim().length > 1
+          )
+          .sort((a,b)=>a.x-b.x);
+        if(nearby.length > 0) shipName = nearby.map(it=>it.str.trim()).join(' ').trim();
+      }
+    }
+
+    // それでも見つからなければ、PDFファイル名をベースにする
+    const baseName = file.name.replace(/\.pdf$/i,'');
+    const defaultFilename = shipName
+      ? shipName.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_')
+      : 'signed_' + baseName;
+
     document.getElementById('infoStrip').innerHTML=
-      `<strong>File:</strong> ${escHtml(file.name)}<br>`+
-      `<strong>Crew:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
-      `<strong>Sign column:</strong> Auto-detected`;
-    document.getElementById('headerSub').textContent=file.name.replace(/\.pdf$/i,'');
+      `<strong>ファイル:</strong> ${escHtml(file.name)}<br>`+
+      `<strong>クルー:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
+      `<strong>Sign列:</strong> 自動検出`+
+      (shipName ? ` &nbsp;|&nbsp; <strong>船名:</strong> ${escHtml(shipName)}` : '');
+    document.getElementById('headerSub').textContent=shipName || baseName;
+    // ファイル名入力欄にセット
+    document.getElementById('filenameInput').value = defaultFilename;
+    document.getElementById('filenameEditor').classList.remove('visible');
     renderList();
     showScreen('app');
 
   }catch(err){
-    alert('Failed to load PDF.\n\n'+err.message);
+    alert('PDFの読み込みに失敗しました。\n\n'+err.message);
     showScreen('upload');
   }
 }
@@ -642,8 +725,8 @@ function showScreen(n){
 function setProc(m){document.getElementById('procLabel').textContent=m;}
 
 function resetApp(){
-  if(!confirm('Load another PDF?\nAll current signatures will be reset.'))return;
-  pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>Tap to add Receipt</div><div class='receipt-sub'>JPG / PNG / PDF supported</div><label for='receiptInput' style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;'>📂 Choose File</label><input type='file' id='receiptInput' accept='image/*,application/pdf' style='display:none;'>`;
+  if(!confirm('別のPDFを読み込みますか？\n現在のサインはすべてリセットされます。'))return;
+  pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書を追加</div><div class='receipt-sub'>JPG / PNG / PDF 対応</div><label style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;'>📂 ファイルを選択<input type='file' id='receiptInput' accept='image/*,application/pdf' style='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;'></label>`;
   document.getElementById('fileInput').value='';
   showScreen('upload');
 }
@@ -656,14 +739,14 @@ function showSignUpload(){
 function showReceiptAttach(){
   document.getElementById('uploadScreen').style.display='none';
   document.getElementById('receiptAttachScreen').style.display='flex';
-  document.getElementById('headerSub').textContent='Receipt Attach Mode';
+  document.getElementById('headerSub').textContent='領収書添付モード';
 }
 function backToModeSelect(){
   document.getElementById('modeSelect').style.display='flex';
   document.getElementById('signUploadArea').style.display='none';
   document.getElementById('uploadScreen').style.display='flex';
   document.getElementById('receiptAttachScreen').style.display='none';
-  document.getElementById('headerSub').textContent='Upload a PDF to get started';
+  document.getElementById('headerSub').textContent='PDFをアップロードして開始';
 }
 
 /* ── Receipt Attach Mode ── */
@@ -715,13 +798,13 @@ function updateRaBtn(){
   const hasReceipt = raReceiptDataURL || raReceiptBytes;
   if(raVoucherBytes && hasReceipt){
     btn.className='ra-dl-btn ready';
-    txt.textContent='Attach Receipt & Download';
+    txt.textContent='領収書を添付してダウンロード';
   } else if(!raVoucherBytes){
     btn.className='ra-dl-btn';
-    txt.textContent='STEP1: Select Signed PDFしてください';
+    txt.textContent='STEP 1: サイン済みPDFを選択してください';
   } else {
     btn.className='ra-dl-btn';
-    txt.textContent='STEP2: Select Receiptしてください';
+    txt.textContent='STEP 2: 領収書を選択してください';
   }
 }
 
@@ -730,7 +813,7 @@ async function attachReceiptToPDF(){
   if(!raVoucherBytes || !hasReceipt) return;
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
-  btn.className='ra-dl-btn'; txt.textContent='Processing...'; 
+  btn.className='ra-dl-btn'; txt.textContent='処理中...';
 
   try{
     const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
@@ -807,13 +890,13 @@ async function attachReceiptToPDF(){
     a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
     URL.revokeObjectURL(url);
 
-    txt.textContent='Download Complete ✓';
+    txt.textContent='ダウンロード完了 ✓';
     btn.className='ra-dl-btn ready';
-    setTimeout(()=>{ txt.textContent='Attach Receipt & Download'; },3000);
+    setTimeout(()=>{ txt.textContent='領収書を添付してダウンロード'; },3000);
 
   }catch(err){
     console.error(err);
-    txt.textContent='An error occurred';
+    txt.textContent='エラーが発生しました';
     btn.className='ra-dl-btn ready';
   }
 }
@@ -836,7 +919,7 @@ function renderList(){
       </div>
       <div class="crew-right">
         ${d?`<img class="crew-sig-thumb" src="${sigs[c.no]}" alt="sign">`:''}
-        <span class="status-chip ${d?'done':'tap'}">${d?'✓ Done':'Tap'}</span>
+        <span class="status-chip ${d?'done':'tap'}">${d?'✓ 完了':'タップ'}</span>
       </div>`;
     list.appendChild(div);
   });
@@ -844,12 +927,15 @@ function renderList(){
   document.getElementById('headerBadge').className='header-badge'+(done===total&&total>0?' all-done':'');
   document.getElementById('progFill').style.width=(total>0?done/total*100:0)+'%';
   const dlBtn=document.getElementById('dlBtn'),dlTxt=document.getElementById('dlBtnText');
+  const fnEditor=document.getElementById('filenameEditor');
   if(done===total&&total>0){
     dlBtn.disabled=false; dlBtn.className='dl-btn ready';
-    dlTxt.textContent='Download Signed PDF';
+    dlTxt.textContent='サイン済みPDFをダウンロード';
+    fnEditor.classList.add('visible');
   }else{
     dlBtn.disabled=true; dlBtn.className='dl-btn';
-    dlTxt.textContent=`${total-done} more signature(s) needed`;
+    dlTxt.textContent=`残り${total-done}名のサインが必要`;
+    fnEditor.classList.remove('visible');
   }
 }
 
@@ -1065,7 +1151,7 @@ function saveSig(){
 /* ── DOWNLOAD ── */
 async function downloadPDF(){
   const btn=document.getElementById('dlBtn'),txt=document.getElementById('dlBtnText');
-  btn.disabled=true; txt.textContent='Generating...';
+  btn.disabled=true; txt.textContent='生成中...';
   try{
     const doc=await PDFLib.PDFDocument.load(pdfBytes);
     const page=doc.getPages()[0];
@@ -1168,13 +1254,15 @@ async function downloadPDF(){
     const blob=new Blob([out],{type:'application/pdf'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download='signed_voucher.pdf'; a.click();
+    const rawName=(document.getElementById('filenameInput').value||'signed_voucher').trim();
+    const dlName=rawName.replace(/\.pdf$/i,'')+'.pdf';
+    a.href=url; a.download=dlName; a.click();
     URL.revokeObjectURL(url);
-    txt.textContent='Download Complete ✓';
-    setTimeout(()=>{ txt.textContent='Download Signed PDF'; btn.disabled=false; },3000);
+    txt.textContent='ダウンロード完了 ✓';
+    setTimeout(()=>{ txt.textContent='サイン済みPDFをダウンロード'; btn.disabled=false; },3000);
   }catch(err){
     console.error(err);
-    txt.textContent='An error occurred'; btn.disabled=false;
+    txt.textContent='エラーが発生しました'; btn.disabled=false;
   }
 }
 
@@ -1194,9 +1282,8 @@ function onReceiptFile(e){
         <button class="receipt-remove" onclick="removeReceipt(event)">×</button>
       </div>
       <div style="font-size:11px;font-weight:600;color:#16a34a;margin-top:6px;">✓ ${escHtml(file.name)}</div>
-      <label for="receiptInput" style="display:inline-block;margin-top:6px;padding:8px 20px;background:#f59e0b;color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📂 Change File</label>
-      <button class="receipt-remove" onclick="removeReceipt(event)" style="display:block;margin:6px auto 0;">× Remove</button>
-      <input type="file" id="receiptInput" accept="image/*,application/pdf" style="display:none;">
+      <label style="display:inline-block;margin-top:6px;padding:8px 20px;background:#f59e0b;color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;">📂 ファイルを変更<input type="file" id="receiptInput" accept="image/*,application/pdf" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;"></label>
+      <button class="receipt-remove" onclick="removeReceipt(event)" style="display:block;margin:6px auto 0;">× 削除</button>
     `;
     // document委任のため個別addEventListenerは不要
   };
@@ -1206,7 +1293,7 @@ function removeReceipt(e){
   e.stopPropagation();
   receiptData=null;
   const box=document.getElementById('receiptBox');
-  box.innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>Tap to add Receipt</div><div class='receipt-sub'>JPG / PNG / PDF supported</div><label for='receiptInput' style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;'>📂 Choose File</label><input type='file' id='receiptInput' accept='image/*,application/pdf' style='display:none;'>`;
+  box.innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書を追加</div><div class='receipt-sub'>JPG / PNG / PDF 対応</div><label style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;'>📂 ファイルを選択<input type='file' id='receiptInput' accept='image/*,application/pdf' style='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;'></label>`;
   // document委任のため個別addEventListenerは不要
 }
 
