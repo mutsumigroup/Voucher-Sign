@@ -685,17 +685,47 @@ async function loadPDF(file){
       }
     }
 
+    // ── Category（Embark / Disembark など）を検出 ──
+    let category = '';
+    const catLabelItem = items.find(it => /category/i.test(it.str));
+    if(catLabelItem){
+      const catY = catLabelItem.y;
+      const catX = catLabelItem.x + catLabelItem.w;
+      const catValueItems = items
+        .filter(it =>
+          it !== catLabelItem &&
+          Math.abs(it.y - catY) < 15 &&
+          it.x >= catX - 5 &&
+          it.str.trim().length > 0
+        )
+        .sort((a,b) => a.x - b.x);
+      if(catValueItems.length > 0){
+        category = catValueItems.map(it => it.str.trim()).join(' ')
+          .replace(/^[:\s]+/,'').trim();
+      }
+    }
+    // パターン2: "Category:" と値が同一テキストアイテム
+    if(!category){
+      for(const it of items){
+        const m = it.str.match(/category[:\s]+(.+)/i);
+        if(m && m[1].trim().length > 0){ category = m[1].trim(); break; }
+      }
+    }
+
     // それでも見つからなければ、PDFファイル名をベースにする
     const baseName = file.name.replace(/\.pdf$/i,'');
-    const defaultFilename = shipName
-      ? shipName.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_')
+    const shipSafe = shipName ? shipName.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_') : '';
+    const catSafe  = category ? category.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_') : '';
+    const defaultFilename = shipSafe
+      ? (catSafe ? shipSafe + '_' + catSafe : shipSafe)
       : 'signed_' + baseName;
 
     document.getElementById('infoStrip').innerHTML=
       `<strong>ファイル:</strong> ${escHtml(file.name)}<br>`+
       `<strong>クルー:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
       `<strong>Sign列:</strong> 自動検出`+
-      (shipName ? ` &nbsp;|&nbsp; <strong>船名:</strong> ${escHtml(shipName)}` : '');
+      (shipName ? ` &nbsp;|&nbsp; <strong>船名:</strong> ${escHtml(shipName)}` : '')+
+      (category  ? ` &nbsp;|&nbsp; <strong>区分:</strong> ${escHtml(category)}`  : '');
     document.getElementById('headerSub').textContent=shipName || baseName;
     // ファイル名入力欄にセット
     document.getElementById('filenameInput').value = defaultFilename;
