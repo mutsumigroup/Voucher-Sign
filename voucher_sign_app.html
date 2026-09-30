@@ -211,11 +211,21 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.5</span>
+          <span class="version-current">v2.6</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.6</span>
+            <span class="ver-date">2026/09/30</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>領収書添付モードでもダウンロードファイル名を「船名_Category_JPY金額」形式に自動変更（例: ENERGY_HORIZON_Embark_JPY16000.pdf）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v2.5</span>
@@ -224,7 +234,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           </div>
           <ul class="ver-changes">
             <li>船名検出ロジックを修正（"Name of Vessel:" がpdf.jsで3分割されても確実に取得）</li>
-            <li>ファイル名が「船名_Category_JPY金額」形式（例: ENERGY_HORIZON_Embark_JPY16000.pdf）で正しく生成されるよう修正</li>
+            <li>ファイル名が「船名_Category_JPY金額」形式で正しく生成されるよう修正</li>
           </ul>
         </div>
         <div class="version-item">
@@ -968,11 +978,83 @@ async function attachReceiptToPDF(){
       }
     }
 
+    // ── ファイル名を自動生成（船名_Category_JPY金額形式） ──
+    // rawItems2 から items 形式（x, y, str）に変換
+    const raItems = rawItems2.map(i=>({x:i.x, y: H - i.yPDF, str:i.str}));
+
+    // Y座標5pt単位でグループ化
+    const raLineMap = new Map();
+    for(const it of raItems){
+      const yKey = Math.round(it.y / 5) * 5;
+      if(!raLineMap.has(yKey)) raLineMap.set(yKey, []);
+      raLineMap.get(yKey).push(it);
+    }
+    const raLines = [...raLineMap.values()].map(row => row.sort((a,b)=>a.x-b.x));
+
+    const raGetVal = (pat, firstWordOnly=false) => {
+      for(const line of raLines){
+        const idx = line.findIndex(it => pat.test(it.str));
+        if(idx >= 0 && idx < line.length - 1){
+          const rest = line.slice(idx + 1);
+          if(firstWordOnly){
+            for(const it of rest){
+              const w = it.str.trim().replace(/[:\s]+$/,'');
+              if(/^[A-Za-z]+$/.test(w)) return w;
+            }
+            return rest[0].str.trim();
+          }
+          return rest.map(it=>it.str.trim()).join(' ').replace(/^[:\s]+/,'').trim();
+        }
+      }
+      return '';
+    };
+
+    let raShipName = raGetVal(/vessel:/i);
+    if(!raShipName){
+      for(const it of raItems){
+        const m = it.str.match(/(?:m\/v|mv|s\.s\.|ss|f\/v|fv)[:\s]+(.+)/i);
+        if(m && m[1].trim().length > 1){ raShipName = m[1].trim(); break; }
+      }
+    }
+
+    let raCategory = raGetVal(/category/i, true);
+    if(!raCategory){
+      for(const it of raItems){
+        const m = it.str.match(/category[:\s]+([A-Za-z]+)/i);
+        if(m && m[1].trim()){ raCategory = m[1].trim(); break; }
+      }
+    }
+
+    let raMealTotal = '';
+    for(const line of raLines){
+      const lineStr = line.map(it=>it.str).join(' ');
+      if(/total/i.test(lineStr) && /jpy/i.test(lineStr)){
+        const jpyIdx = line.findIndex(it => /^jpy$/i.test(it.str.trim()));
+        if(jpyIdx >= 0 && jpyIdx < line.length - 1){
+          const numStr = line[jpyIdx + 1].str.replace(/[^0-9,]/g,'');
+          if(numStr){ raMealTotal = 'JPY' + numStr.replace(/,/g,''); break; }
+        }
+        for(const it of line){
+          const m = it.str.match(/jpy\s*([\d,]+)/i);
+          if(m){ raMealTotal = 'JPY' + m[1].replace(/,/g,''); break; }
+        }
+        if(raMealTotal) break;
+      }
+    }
+
+    const safe = s => s.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_');
+    const raParts = [
+      raShipName  ? safe(raShipName)  : '',
+      raCategory  ? safe(raCategory)  : '',
+      raMealTotal ? safe(raMealTotal) : ''
+    ].filter(Boolean);
+    const raFilename = raParts.length > 0 ? raParts.join('_') + '.pdf' : 'voucher_with_receipt.pdf';
+
     const out=await doc.save();
     const blob=new Blob([out],{type:'application/pdf'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download='voucher_with_receipt.pdf'; a.click();
+    a.href=url; a.download=raFilename; a.click();
     URL.revokeObjectURL(url);
 
     txt.textContent='ダウンロード完了 ✓';
