@@ -211,11 +211,45 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.1</span>
+          <span class="version-current">v2.4</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.4</span>
+            <span class="ver-date">2026/09/30</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>PDFから船名・Category（Embark/Disembarkなど）・Meal allowance合計金額を自動読み取り</li>
+            <li>保存ファイル名を「船名_Category_JPY金額」形式で自動生成（手動編集も可）</li>
+            <li>情報バーを船名・区分・合計の3項目に絞って表示</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.3</span>
+            <span class="ver-date">2026/09/30</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>領収書添付モードでPDF領収書を選択するとエラーになる問題を修正</li>
+            <li>PDF/画像の条件分岐順序を修正（PDFを先に判定するよう変更）</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.2</span>
+            <span class="ver-date">2026/09/30</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>UI全体を日本語化（サイン入力画面のみ英語を維持）</li>
+            <li>保存ファイル名をPDFの船名から自動生成する機能を追加（手動編集も可）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v2.1</span>
@@ -224,7 +258,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           </div>
           <ul class="ver-changes">
             <li>iPhone Safari でファイル選択ボタンが反応しない問題を修正（全ファイル入力を label 方式に変更）</li>
-            <li>Collect Signatures / Attach Receipt 両モードのアップロードボタンをタップ可能な「Choose File」ボタンに改善</li>
+            <li>Collect Signatures / Attach Receipt 両モードのアップロードボタンをタップ可能なボタンに改善</li>
           </ul>
         </div>
         <div class="version-item">
