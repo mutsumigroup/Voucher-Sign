@@ -851,10 +851,6 @@ async function attachReceiptToPDF(){
     const spaceH      = spaceTop - spaceBottom;
 
     if(spaceH > 20){
-      // 画像埋め込み
-      const imgB64=raReceiptDataURL.split(',')[1];
-      const mime=raReceiptDataURL.split(';')[0].split(':')[1];
-
       if(raReceiptBytes){
         // PDFの場合：ArrayBytesから直接埋め込む
         const receiptPdfDoc=await PDFLib.PDFDocument.load(raReceiptBytes);
@@ -867,8 +863,10 @@ async function attachReceiptToPDF(){
           x: spaceLeft+ox, y: spaceBottom+oy,
           width: dw, height: dh
         });
-      } else {
+      } else if(raReceiptDataURL){
         // 画像（JPG/PNG）の場合
+        const imgB64=raReceiptDataURL.split(',')[1];
+        const mime=raReceiptDataURL.split(';')[0].split(':')[1];
         let embImg;
         if(mime==='image/png') embImg=await doc.embedPng(b64ToU8(imgB64));
         else embImg=await doc.embedJpg(b64ToU8(imgB64));
