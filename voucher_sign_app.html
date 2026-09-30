@@ -704,7 +704,6 @@ async function loadPDF(file){
           .replace(/^[:\s]+/,'').trim();
       }
     }
-    // パターン2: "Category:" と値が同一テキストアイテム
     if(!category){
       for(const it of items){
         const m = it.str.match(/category[:\s]+(.+)/i);
@@ -712,20 +711,58 @@ async function loadPDF(file){
       }
     }
 
-    // それでも見つからなければ、PDFファイル名をベースにする
+    // ── Meal allowance Total JPY金額を検出 ──
+    // "Meal allowance :Total JPY 16,000//" のような行から金額を取得
+    let mealTotal = '';
+    // "Total" と "JPY" が同じY座標付近にある行を探す
+    const totalItem = items.find(it => /total/i.test(it.str) && items.some(
+      jpy => /^jpy$/i.test(jpy.str.trim()) && Math.abs(jpy.y - it.y) < 15 && jpy.x > it.x
+    ));
+    if(totalItem){
+      const tY = totalItem.y;
+      // 同じ行のJPYアイテムを探す
+      const jpyItem = items.find(it =>
+        /^jpy$/i.test(it.str.trim()) &&
+        Math.abs(it.y - tY) < 15 &&
+        it.x > totalItem.x
+      );
+      if(jpyItem){
+        // JPYの直後の数字アイテムを取得
+        const amtItem = items
+          .filter(it =>
+            Math.abs(it.y - tY) < 15 &&
+            it.x > jpyItem.x &&
+            /[\d,]/.test(it.str)
+          )
+          .sort((a,b) => a.x - b.x)[0];
+        if(amtItem){
+          // 数字とカンマだけ抽出（"//"などは除去）
+          mealTotal = 'JPY' + amtItem.str.replace(/[^0-9,]/g,'');
+        }
+      }
+    }
+    // フォールバック: "JPY 16,000" パターンをテキスト全体から検索
+    if(!mealTotal){
+      for(const it of items){
+        const m = it.str.match(/jpy[\s]*([\d,]+)/i);
+        if(m){ mealTotal = 'JPY' + m[1].replace(/,/g,'').replace(/[^0-9]/g,''); break; }
+      }
+    }
+
+    // ── ファイル名生成（船名_Category_金額） ──
     const baseName = file.name.replace(/\.pdf$/i,'');
-    const shipSafe = shipName ? shipName.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_') : '';
-    const catSafe  = category ? category.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_') : '';
-    const defaultFilename = shipSafe
-      ? (catSafe ? shipSafe + '_' + catSafe : shipSafe)
-      : 'signed_' + baseName;
+    const safe = s => s.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_');
+    const parts = [
+      shipName  ? safe(shipName)  : '',
+      category  ? safe(category)  : '',
+      mealTotal ? safe(mealTotal) : ''
+    ].filter(Boolean);
+    const defaultFilename = parts.length > 0 ? parts.join('_') : 'signed_' + baseName;
 
     document.getElementById('infoStrip').innerHTML=
-      `<strong>ファイル:</strong> ${escHtml(file.name)}<br>`+
-      `<strong>クルー:</strong> ${crewData.length}名 &nbsp;|&nbsp; `+
-      `<strong>Sign列:</strong> 自動検出`+
-      (shipName ? ` &nbsp;|&nbsp; <strong>船名:</strong> ${escHtml(shipName)}` : '')+
-      (category  ? ` &nbsp;|&nbsp; <strong>区分:</strong> ${escHtml(category)}`  : '');
+      (shipName  ? `<strong>船名:</strong> ${escHtml(shipName)}` : '')+
+      (category  ? ` &nbsp;|&nbsp; <strong>区分:</strong> ${escHtml(category)}`   : '')+
+      (mealTotal ? ` &nbsp;|&nbsp; <strong>合計:</strong> ${escHtml(mealTotal)}` : '');
     document.getElementById('headerSub').textContent=shipName || baseName;
     // ファイル名入力欄にセット
     document.getElementById('filenameInput').value = defaultFilename;
