@@ -211,20 +211,20 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.7</span>
+          <span class="version-current">v2.8</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
         <div class="version-item">
           <div class="version-item-header">
-            <span class="ver-num">v2.7</span>
-            <span class="ver-date">2026/10/03</span>
+            <span class="ver-num">v2.8</span>
+            <span class="ver-date">2026/10/04</span>
             <span class="ver-tag fix">Fix</span>
           </div>
           <ul class="ver-changes">
-            <li>ChatGPT等で編集・結合したPDFをiOSで開くと真っ黒になる問題を修正</li>
-            <li>PDF読み込み時にc2pa等の問題メタデータを自動除去して最適化</li>
+            <li>「Inconsistent generation in XRef」エラーを修正（ChatGPT等で結合・編集されたPDFのXRef破損を許容）</li>
+            <li>pdf.js・pdf-lib両方でXRefエラーを無視するオプションを追加し、壊れたPDFでも読み込み継続</li>
           </ul>
         </div>
         <div class="version-item">
@@ -523,7 +523,26 @@ async function loadPDF(file){
     pdfBytes = await cleanPdfBytes(pdfBytes);
 
     setProc('ページをレンダリング中...');
-    const pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
+    // XRef破損PDFに対応: まず通常ロード、失敗したらデータを修復して再試行
+    let pdfjsDoc;
+    try{
+      pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice(), stopAtErrors:false}).promise;
+    }catch(xrefErr){
+      console.warn('pdf.js load failed, trying repair:', xrefErr.message);
+      // XRefエラーの場合: pdf-libで強制修復してから再ロード
+      try{
+        const repaired=await PDFLib.PDFDocument.load(pdfBytes,{
+          throwOnInvalidObject:false, updateMetadata:false, ignoreEncryption:true
+        });
+        const repairedBytes=new Uint8Array(await repaired.save());
+        pdfjsDoc=await pdfjsLib.getDocument({data:repairedBytes, stopAtErrors:false}).promise;
+        pdfBytes=repairedBytes; // 修復済みバイトを使用
+      }catch(repairErr){
+        console.warn('repair also failed, trying raw:', repairErr.message);
+        // 最後の手段: 元のバイトで強制ロード
+        pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
+      }
+    }
     const page=await pdfjsDoc.getPage(1);
 
     // ページ実サイズ（ポイント単位）を記録
@@ -929,12 +948,12 @@ async function attachReceiptToPDF(){
   btn.className='ra-dl-btn'; txt.textContent='処理中...';
 
   try{
-    const doc=await PDFLib.PDFDocument.load(raVoucherBytes);
+    const doc=await PDFLib.PDFDocument.load(raVoucherBytes, {throwOnInvalidObject:false, updateMetadata:false});
     const page=doc.getPages()[0];
     const {width:W, height:H}=page.getSize();
 
     // ── 空白スペースを検出（クルーテーブル下〜Important Notice上）──
-    const pdfjsDoc=await pdfjsLib.getDocument({data:raVoucherBytes.slice()}).promise;
+    const pdfjsDoc=await pdfjsLib.getDocument({data:raVoucherBytes.slice(), stopAtErrors:false}).promise;
     const pg=await pdfjsDoc.getPage(1);
     const content=await pg.getTextContent();
 
@@ -1368,7 +1387,7 @@ async function downloadPDF(){
     if(receiptData){
       try{
         // テキスト抽出で空白スペースを検出
-        const pdfjsDoc2=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
+        const pdfjsDoc2=await pdfjsLib.getDocument({data:pdfBytes.slice(), stopAtErrors:false}).promise;
         const pg2=await pdfjsDoc2.getPage(1);
         const content2=await pg2.getTextContent();
         const H2=page.getSize().height;
