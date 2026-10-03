@@ -211,11 +211,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.6</span>
+          <span class="version-current">v2.7</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v2.7</span>
+            <span class="ver-date">2026/10/03</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ChatGPT等で編集・結合したPDFをiOSで開くと真っ黒になる問題を修正</li>
+            <li>PDF読み込み時にc2pa等の問題メタデータを自動除去して最適化</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v2.6</span>
@@ -506,6 +517,10 @@ async function loadPDF(file){
   try{
     const ab=await file.arrayBuffer();
     pdfBytes=new Uint8Array(ab);
+
+    // c2pa等の問題メタデータを除去（ChatGPT等で編集されたPDFがiOSで真っ黒になる問題を防ぐ）
+    setProc('PDFを最適化中...');
+    pdfBytes = await cleanPdfBytes(pdfBytes);
 
     setProc('ページをレンダリング中...');
     const pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice()}).promise;
@@ -857,7 +872,8 @@ document.addEventListener('change', async e=>{
   if(e.target.id==='raVoucherInput'){
     const file=e.target.files[0]; if(!file) return;
     const ab=await file.arrayBuffer();
-    raVoucherBytes=new Uint8Array(ab);
+    // c2pa等の問題メタデータを除去（ChatGPT等で編集されたPDFがiOSで真っ黒になる問題を防ぐ）
+    raVoucherBytes = await cleanPdfBytes(new Uint8Array(ab));
     document.getElementById('raVoucherBox').classList.add('has-file');
     const nm=document.getElementById('raVoucherName');
     nm.textContent='✓ '+file.name; nm.style.display='block';
@@ -1462,6 +1478,18 @@ function removeReceipt(e){
   const box=document.getElementById('receiptBox');
   box.innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書を追加</div><div class='receipt-sub'>JPG / PNG / PDF 対応</div><label style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;'>📂 ファイルを選択<input type='file' id='receiptInput' accept='image/*,application/pdf' style='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;'></label>`;
   // document委任のため個別addEventListenerは不要
+}
+
+// ── PDF クリーンアップ（c2pa等の問題メタデータを除去してiOSで確実に開けるよう再保存） ──
+async function cleanPdfBytes(bytes){
+  try{
+    const doc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption: true});
+    const out  = await doc.save();
+    return new Uint8Array(out);
+  }catch(e){
+    console.warn('PDF cleanup failed, using original:', e);
+    return bytes;
+  }
 }
 
 function b64ToU8(s){
