@@ -211,20 +211,20 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.8</span>
+          <span class="version-current">v2.9</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
         <div class="version-item">
           <div class="version-item-header">
-            <span class="ver-num">v2.8</span>
+            <span class="ver-num">v2.9</span>
             <span class="ver-date">2026/10/04</span>
             <span class="ver-tag fix">Fix</span>
           </div>
           <ul class="ver-changes">
-            <li>「Inconsistent generation in XRef」エラーを修正（ChatGPT等で結合・編集されたPDFのXRef破損を許容）</li>
-            <li>pdf.js・pdf-lib両方でXRefエラーを無視するオプションを追加し、壊れたPDFでも読み込み継続</li>
+            <li>XRefエラー時に自動修復を試みるフォールバック処理を追加（pdf.js読み込み失敗→pdf-libで修復→再ロードの3段階）</li>
+            <li>ChatGPT等で結合・編集されたXRef破損PDFを確実に読み込めるよう改善</li>
           </ul>
         </div>
         <div class="version-item">
@@ -1499,27 +1499,51 @@ function removeReceipt(e){
   // document委任のため個別addEventListenerは不要
 }
 
-// ── PDF クリーンアップ（c2pa等の問題メタデータを除去してiOSで確実に開けるよう再保存） ──
+// ── PDF クリーンアップ（c2pa除去・XRef修復） ──
+// ChatGPT等がPDF末尾にc2paメタデータを追記する際、XRefが壊れることがある。
+// 修復策: 最初の %%EOF までを切り出す（追記部分を捨てる）→ pdf-libで再保存。
 async function cleanPdfBytes(bytes){
-  // 試行1: 通常のロード（壊れたXRefも許容するオプション付き）
+  // Step1: 最初の %%EOF の位置を探して、その後の追記を除去
+  let trimmed = bytes;
+  try{
+    // %%EOF (25 46 46 45 4F 46) を検索
+    const eofMarker = new Uint8Array([0x25,0x25,0x45,0x4F,0x46]); // %%EOF
+    let firstEof = -1;
+    for(let i = 0; i < bytes.length - 5; i++){
+      if(bytes[i]===0x25 && bytes[i+1]===0x25 && bytes[i+2]===0x45 && bytes[i+3]===0x4F && bytes[i+4]===0x46){
+        firstEof = i;
+        break;
+      }
+    }
+    if(firstEof > 0 && firstEof < bytes.length - 10){
+      // 最初のEOFの後にまだデータがある → 追記を除去
+      trimmed = bytes.slice(0, firstEof + 5);
+      console.log(`PDF trimmed: ${bytes.length} -> ${trimmed.length} bytes (removed appended data)`);
+    }
+  }catch(e){
+    console.warn('PDF trim failed:', e.message);
+    trimmed = bytes;
+  }
+
+  // Step2: pdf-libで再保存（XRefを再構築）
   const loadOpts = [
     {ignoreEncryption:true, throwOnInvalidObject:false, updateMetadata:false},
-    {ignoreEncryption:true, throwOnInvalidObject:false, updateMetadata:false, parseSpeed:1500},
+    {ignoreEncryption:true, throwOnInvalidObject:false},
     {ignoreEncryption:true},
   ];
   for(const opts of loadOpts){
     try{
-      const doc = await PDFLib.PDFDocument.load(bytes, opts);
+      const doc = await PDFLib.PDFDocument.load(trimmed, opts);
       const out  = await doc.save();
-      console.log('PDF cleanup succeeded with opts:', opts);
+      console.log('PDF cleanup succeeded');
       return new Uint8Array(out);
     }catch(e){
       console.warn('PDF cleanup attempt failed:', e.message);
     }
   }
-  // すべて失敗した場合は元のバイトをそのまま使用（pdf.jsは壊れたXRefでも読める）
-  console.warn('PDF cleanup skipped, using original bytes');
-  return bytes;
+  // trimmedだけでも返す（pdf.jsはXRef破損でも読める場合がある）
+  console.warn('pdf-lib cleanup failed, returning trimmed bytes');
+  return trimmed;
 }
 
 function b64ToU8(s){
