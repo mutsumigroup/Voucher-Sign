@@ -1482,14 +1482,25 @@ function removeReceipt(e){
 
 // ── PDF クリーンアップ（c2pa等の問題メタデータを除去してiOSで確実に開けるよう再保存） ──
 async function cleanPdfBytes(bytes){
-  try{
-    const doc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption: true});
-    const out  = await doc.save();
-    return new Uint8Array(out);
-  }catch(e){
-    console.warn('PDF cleanup failed, using original:', e);
-    return bytes;
+  // 試行1: 通常のロード（壊れたXRefも許容するオプション付き）
+  const loadOpts = [
+    {ignoreEncryption:true, throwOnInvalidObject:false, updateMetadata:false},
+    {ignoreEncryption:true, throwOnInvalidObject:false, updateMetadata:false, parseSpeed:1500},
+    {ignoreEncryption:true},
+  ];
+  for(const opts of loadOpts){
+    try{
+      const doc = await PDFLib.PDFDocument.load(bytes, opts);
+      const out  = await doc.save();
+      console.log('PDF cleanup succeeded with opts:', opts);
+      return new Uint8Array(out);
+    }catch(e){
+      console.warn('PDF cleanup attempt failed:', e.message);
+    }
   }
+  // すべて失敗した場合は元のバイトをそのまま使用（pdf.jsは壊れたXRefでも読める）
+  console.warn('PDF cleanup skipped, using original bytes');
+  return bytes;
 }
 
 function b64ToU8(s){
