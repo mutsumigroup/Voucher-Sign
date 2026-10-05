@@ -211,11 +211,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v2.9</span>
+          <span class="version-current">v3.0</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v3.0</span>
+            <span class="ver-date">2026/10/04</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ChatGPT等がPDF末尾に追記した壊れたXRefインクリメンタルアップデートを除去する修復ロジックを追加（最初の%%EOFで切り捨て）</li>
+            <li>「Inconsistent generation in XRef: 4R」エラーが発生するPDFを確実に読み込めるよう修正</li>
+            <li>iOSでChatGPT編集PDFが黒画面になる問題の修復精度を向上</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v2.9</span>
@@ -523,18 +535,15 @@ async function loadPDF(file){
     pdfBytes = await cleanPdfBytes(pdfBytes);
 
     setProc('ページをレンダリング中...');
-    // XRef破損PDFに対応: まず通常ロード、失敗したらデータを修復して再試行
+    // XRef破損PDFに対応: まず通常ロード、失敗したらcleanPdfBytesで再修復して再試行
     let pdfjsDoc;
     try{
       pdfjsDoc=await pdfjsLib.getDocument({data:pdfBytes.slice(), stopAtErrors:false}).promise;
     }catch(xrefErr){
-      console.warn('pdf.js load failed, trying repair:', xrefErr.message);
-      // XRefエラーの場合: pdf-libで強制修復してから再ロード
+      console.warn('pdf.js load failed, trying re-clean:', xrefErr.message);
+      // XRefエラーの場合: cleanPdfBytesで%%EOF切り捨て+pdf-lib再保存してから再ロード
       try{
-        const repaired=await PDFLib.PDFDocument.load(pdfBytes,{
-          throwOnInvalidObject:false, updateMetadata:false, ignoreEncryption:true
-        });
-        const repairedBytes=new Uint8Array(await repaired.save());
+        const repairedBytes=await cleanPdfBytes(pdfBytes);
         pdfjsDoc=await pdfjsLib.getDocument({data:repairedBytes, stopAtErrors:false}).promise;
         pdfBytes=repairedBytes; // 修復済みバイトを使用
       }catch(repairErr){
@@ -1501,31 +1510,52 @@ function removeReceipt(e){
 
 // ── PDF クリーンアップ（c2pa除去・XRef修復） ──
 // ChatGPT等がPDF末尾にc2paメタデータを追記する際、XRefが壊れることがある。
-// 修復策: 最初の %%EOF までを切り出す（追記部分を捨てる）→ pdf-libで再保存。
+// 修復策:
+//  通常PDF: 最初の%%EOFで切り捨て（ChatGPT追記のXRef破損除去）→ pdf-libで再保存
+//  Linearized PDF: %%EOF切り捨てはスキップ（中間に合法的な%%EOFがある）→ pdf-libで再保存のみ
 async function cleanPdfBytes(bytes){
-  // Step1: 最初の %%EOF の位置を探して、その後の追記を除去
-  let trimmed = bytes;
+  // Linearized PDF判定（先頭1024バイト内に /Linearized があるか）
+  // Linearized PDFでは先頭部分に合法的な %%EOF が含まれるため切り捨て不可
+  let isLinearized = false;
   try{
-    // %%EOF (25 46 46 45 4F 46) を検索
-    const eofMarker = new Uint8Array([0x25,0x25,0x45,0x4F,0x46]); // %%EOF
-    let firstEof = -1;
-    for(let i = 0; i < bytes.length - 5; i++){
-      if(bytes[i]===0x25 && bytes[i+1]===0x25 && bytes[i+2]===0x45 && bytes[i+3]===0x4F && bytes[i+4]===0x46){
-        firstEof = i;
+    const head = bytes.slice(0, Math.min(1024, bytes.length));
+    // "/Linearized" をバイト列で検索
+    const linTag = new Uint8Array([0x2F,0x4C,0x69,0x6E,0x65,0x61,0x72,0x69,0x7A,0x65,0x64]); // /Linearized
+    for(let i = 0; i < head.length - 11; i++){
+      if(head[i]===0x2F && head[i+1]===0x4C && head[i+2]===0x69 && head[i+3]===0x6E &&
+         head[i+4]===0x65 && head[i+5]===0x61 && head[i+6]===0x72 && head[i+7]===0x69 &&
+         head[i+8]===0x7A && head[i+9]===0x65 && head[i+10]===0x64){
+        isLinearized = true;
         break;
       }
     }
-    if(firstEof > 0 && firstEof < bytes.length - 10){
-      // 最初のEOFの後にまだデータがある → 追記を除去
-      trimmed = bytes.slice(0, firstEof + 5);
-      console.log(`PDF trimmed: ${bytes.length} -> ${trimmed.length} bytes (removed appended data)`);
+  }catch(e){}
+
+  // Step1: %%EOF切り捨て（通常PDFのみ、Linearized PDFはスキップ）
+  let trimmed = bytes;
+  if(!isLinearized){
+    try{
+      let firstEof = -1;
+      for(let i = 0; i < bytes.length - 5; i++){
+        if(bytes[i]===0x25 && bytes[i+1]===0x25 && bytes[i+2]===0x45 && bytes[i+3]===0x4F && bytes[i+4]===0x46){
+          firstEof = i;
+          break;
+        }
+      }
+      if(firstEof > 0 && firstEof < bytes.length - 10){
+        // 最初のEOFの後にまだデータがある → ChatGPT追記を除去
+        trimmed = bytes.slice(0, firstEof + 5);
+        console.log(`PDF trimmed: ${bytes.length} -> ${trimmed.length} bytes (removed appended data)`);
+      }
+    }catch(e){
+      console.warn('PDF trim failed:', e.message);
+      trimmed = bytes;
     }
-  }catch(e){
-    console.warn('PDF trim failed:', e.message);
-    trimmed = bytes;
+  } else {
+    console.log('Linearized PDF detected, skipping %%EOF trim');
   }
 
-  // Step2: pdf-libで再保存（XRefを再構築）
+  // Step2: pdf-libで再保存（XRefを再構築・c2paメタデータ除去）
   const loadOpts = [
     {ignoreEncryption:true, throwOnInvalidObject:false, updateMetadata:false},
     {ignoreEncryption:true, throwOnInvalidObject:false},
@@ -1541,7 +1571,7 @@ async function cleanPdfBytes(bytes){
       console.warn('PDF cleanup attempt failed:', e.message);
     }
   }
-  // trimmedだけでも返す（pdf.jsはXRef破損でも読める場合がある）
+  // pdf-lib失敗時はtrimmedをそのまま返す（pdf.jsはXRef破損でも読める場合がある）
   console.warn('pdf-lib cleanup failed, returning trimmed bytes');
   return trimmed;
 }
