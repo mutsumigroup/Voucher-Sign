@@ -1772,15 +1772,24 @@ function base64ToUint8(b64){
   return u8;
 }
 
-async function saveToArchive(pdfBytes, filename, type){
-  // type: 'sign' | 'receipt'
+async function saveToArchive(pdfBytes, filename, type, customDate){
+  // type: 'sign' | 'receipt' | 'upload'
+  // customDate: 'YYYY-MM-DD' string (optional, for upload type)
   try{
     const db = await getFirestore();
     const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+    let savedAt;
+    if(customDate){
+      // 日付のみ: YYYY-MM-DD → その日の正午ISOとして保存（タイムゾーン問題を避ける）
+      savedAt = customDate + 'T00:00:00.000Z';
+    } else {
+      savedAt = new Date().toISOString();
+    }
     const record = {
       filename,
       type,
-      savedAt: new Date().toISOString(),
+      savedAt,
+      dateOnly: !!customDate,  // 日付のみフラグ
       pdfBase64: uint8ToBase64(bytes)
     };
     const ref = await db.collection('vouchers').add(record);
@@ -1914,7 +1923,14 @@ async function renderArchive(){
 
 function renderArchiveItem(r){
   const d = new Date(r.savedAt);
-  const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  let dateStr;
+  if(r.dateOnly){
+    // 日付のみ（upload時に手動設定）
+    const parts = r.savedAt.split('T')[0].split('-');
+    dateStr = `${parts[0]}/${parts[1]}/${parts[2]}`;
+  } else {
+    dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
   const typeLabel = r.type === 'receipt' ? '領収書添付' : r.type === 'upload' ? '直接追加' : 'サイン収集';
   const typeClass = r.type === 'receipt' ? 'receipt' : r.type === 'upload' ? 'upload' : 'sign';
   const checked = archiveSelectedIds.has(r.id);
@@ -2042,6 +2058,10 @@ async function handleArchiveUpload(event){
   event.target.value = ''; // 同じファイルを再度選べるようにリセット
   if(!file || file.type !== 'application/pdf') return;
 
+  // 日付選択モーダルを表示し、選択後に保存
+  const chosenDate = await showDatePickerModal(file.name);
+  if(chosenDate === null) return; // キャンセル
+
   const list = document.getElementById('archiveList');
   // 読み込み中表示
   const notice = document.createElement('div');
@@ -2052,12 +2072,64 @@ async function handleArchiveUpload(event){
   try{
     const ab = await file.arrayBuffer();
     const bytes = new Uint8Array(ab);
-    await saveToArchive(bytes, file.name, 'upload');
+    await saveToArchive(bytes, file.name, 'upload', chosenDate);
     await renderArchive();
   }catch(e){
     notice.remove();
     alert('アップロードに失敗しました: ' + e.message);
   }
+}
+
+// 日付選択モーダルを表示し、選んだ日付文字列(YYYY-MM-DD)を返す。キャンセルはnull
+function showDatePickerModal(filename){
+  return new Promise((resolve) => {
+    // 今日の日付をデフォルトに
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px 20px;width:min(320px,90vw);box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <div style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">📅 日付を設定</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:16px;word-break:break-all;">${escHtml(filename)}</div>
+        <label style="font-size:13px;color:#374151;font-weight:600;display:block;margin-bottom:6px;">書類の日付</label>
+        <input type="date" id="datePickerInput" value="${todayStr}"
+          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;color:#1e1b4b;outline:none;margin-bottom:20px;">
+        <div style="display:flex;gap:10px;">
+          <button id="datePickerCancel"
+            style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">
+            キャンセル
+          </button>
+          <button id="datePickerOk"
+            style="flex:1;padding:10px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">
+            追加
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 入力フォーカス
+    setTimeout(()=>{ const inp = document.getElementById('datePickerInput'); if(inp) inp.focus(); }, 50);
+
+    document.getElementById('datePickerOk').onclick = () => {
+      const val = document.getElementById('datePickerInput').value;
+      document.body.removeChild(overlay);
+      resolve(val || todayStr);
+    };
+    document.getElementById('datePickerCancel').onclick = () => {
+      document.body.removeChild(overlay);
+      resolve(null);
+    };
+    // オーバーレイ背景クリックでキャンセル
+    overlay.addEventListener('click', (e) => {
+      if(e.target === overlay){
+        document.body.removeChild(overlay);
+        resolve(null);
+      }
+    });
+  });
 }
 
 async function deleteSingleArchive(id){
