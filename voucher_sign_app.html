@@ -583,6 +583,27 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   </div>
 </div>
 
+<!-- 日付選択モーダル（最初からHTML内に存在させる） -->
+<div id="datePickerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:2147483647;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:24px 20px;width:min(320px,88vw);box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+    <div style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">📅 日付を設定</div>
+    <div id="datePickerFilename" style="font-size:12px;color:#6b7280;margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+    <label style="font-size:13px;color:#374151;font-weight:600;display:block;margin-bottom:6px;">書類の日付</label>
+    <input type="date" id="datePickerInput"
+      style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:16px;color:#1e1b4b;outline:none;margin-bottom:20px;-webkit-appearance:none;appearance:none;">
+    <div style="display:flex;gap:10px;">
+      <button onclick="datePickerCancel()"
+        style="flex:1;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">
+        キャンセル
+      </button>
+      <button onclick="datePickerConfirm()"
+        style="flex:1;padding:12px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">
+        追加する
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="sign-overlay" id="signOverlay">
   <div class="sign-preview-area" id="previewArea">
     <img id="previewImg" src="" alt="">
@@ -2053,22 +2074,51 @@ async function toggleConfirmed(id, currentState){
   }
 }
 
+// 日付ピッカー用：選択中のファイルとPromiseのresolveを保持
+let _datePickerFile = null;
+let _datePickerResolve = null;
+
 async function handleArchiveUpload(event){
   const file = event.target.files[0];
+  if(!file) return;
+  const fileName = file.name;
+  const fileType = file.type || (fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
   event.target.value = ''; // 同じファイルを再度選べるようにリセット
-  if(!file || file.type !== 'application/pdf') return;
+  if(fileType !== 'application/pdf') return;
 
-  // 日付選択モーダルを表示し、選択後に保存
-  const chosenDate = await showDatePickerModal(file.name);
-  if(chosenDate === null) return; // キャンセル
+  // ファイルを保存しておく
+  _datePickerFile = file;
 
+  // 今日の日付をデフォルトにセット
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  document.getElementById('datePickerInput').value = todayStr;
+  document.getElementById('datePickerFilename').textContent = fileName;
+
+  // モーダルを表示（display:noneをflexに変えるだけ）
+  const overlay = document.getElementById('datePickerOverlay');
+  overlay.style.display = 'flex';
+}
+
+function datePickerConfirm(){
+  const overlay = document.getElementById('datePickerOverlay');
+  const val = document.getElementById('datePickerInput').value;
+  overlay.style.display = 'none';
+  if(_datePickerFile) _doUploadWithDate(_datePickerFile, val);
+  _datePickerFile = null;
+}
+
+function datePickerCancel(){
+  document.getElementById('datePickerOverlay').style.display = 'none';
+  _datePickerFile = null;
+}
+
+async function _doUploadWithDate(file, chosenDate){
   const list = document.getElementById('archiveList');
-  // 読み込み中表示
   const notice = document.createElement('div');
   notice.style.cssText = 'text-align:center;padding:10px;color:#7c3aed;font-size:13px;font-weight:700;';
   notice.textContent = '📤 アップロード中...';
   list.prepend(notice);
-
   try{
     const ab = await file.arrayBuffer();
     const bytes = new Uint8Array(ab);
@@ -2078,58 +2128,6 @@ async function handleArchiveUpload(event){
     notice.remove();
     alert('アップロードに失敗しました: ' + e.message);
   }
-}
-
-// 日付選択モーダルを表示し、選んだ日付文字列(YYYY-MM-DD)を返す。キャンセルはnull
-function showDatePickerModal(filename){
-  return new Promise((resolve) => {
-    // 今日の日付をデフォルトに
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    overlay.innerHTML = `
-      <div style="background:#fff;border-radius:16px;padding:24px 20px;width:min(320px,90vw);box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <div style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">📅 日付を設定</div>
-        <div style="font-size:12px;color:#6b7280;margin-bottom:16px;word-break:break-all;">${escHtml(filename)}</div>
-        <label style="font-size:13px;color:#374151;font-weight:600;display:block;margin-bottom:6px;">書類の日付</label>
-        <input type="date" id="datePickerInput" value="${todayStr}"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;color:#1e1b4b;outline:none;margin-bottom:20px;">
-        <div style="display:flex;gap:10px;">
-          <button id="datePickerCancel"
-            style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">
-            キャンセル
-          </button>
-          <button id="datePickerOk"
-            style="flex:1;padding:10px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">
-            追加
-          </button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    // 入力フォーカス
-    setTimeout(()=>{ const inp = document.getElementById('datePickerInput'); if(inp) inp.focus(); }, 50);
-
-    document.getElementById('datePickerOk').onclick = () => {
-      const val = document.getElementById('datePickerInput').value;
-      document.body.removeChild(overlay);
-      resolve(val || todayStr);
-    };
-    document.getElementById('datePickerCancel').onclick = () => {
-      document.body.removeChild(overlay);
-      resolve(null);
-    };
-    // オーバーレイ背景クリックでキャンセル
-    overlay.addEventListener('click', (e) => {
-      if(e.target === overlay){
-        document.body.removeChild(overlay);
-        resolve(null);
-      }
-    });
-  });
 }
 
 async function deleteSingleArchive(id){
