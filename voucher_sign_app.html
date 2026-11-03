@@ -184,7 +184,13 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-item-type{padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;}
 .archive-item-type.sign{background:#dbeafe;color:#1d4ed8;}
 .archive-item-type.receipt{background:#fef3c7;color:#92400e;}
+.archive-item-type.upload{background:#e0f2fe;color:#0369a1;}
+.archive-item.confirmed{background:#f0fdf4;}
 .archive-item-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.archive-item-confirm{padding:6px 10px;border-radius:8px;border:1.5px solid #d1dce8;background:#fff;color:#d1dce8;font-size:14px;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.archive-item-confirm.confirmed{border-color:#16a34a;background:#dcfce7;filter:none;}
+.archive-item-confirm:not(.confirmed){filter:grayscale(1);opacity:0.4;}
+.archive-item-confirm:active{opacity:.7;}
 .archive-item-dl{padding:6px 10px;border-radius:8px;border:1.5px solid #7c3aed;background:#fff;color:#7c3aed;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .archive-item-dl:active{background:#7c3aed;color:#fff;}
 .archive-item-del{padding:6px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
@@ -197,6 +203,8 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-empty-icon{font-size:40px;margin-bottom:12px;}
 .archive-empty-text{font-size:14px;font-weight:700;}
 .archive-empty-sub{font-size:12px;margin-top:4px;line-height:1.5;}
+.archive-add-btn{padding:7px 14px;border-radius:10px;border:1.5px solid #7c3aed;background:#faf5ff;color:#7c3aed;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.archive-add-btn:active{background:#7c3aed;color:#fff;}
 .archive-select-all-row{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;}
 .archive-select-all-btn{background:none;border:1.5px solid #d1dce8;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;}
 .archive-select-all-btn:active{opacity:.7;}
@@ -553,7 +561,11 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
   <!-- 署名済み一覧スクリーン -->
   <div class="archive-screen" id="archiveScreen">
-    <div class="sec-label">📂 署名済み一覧</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="sec-label">📂 署名済み一覧</div>
+      <button class="archive-add-btn" onclick="document.getElementById('archiveUploadInput').click()">＋ PDFを追加</button>
+      <input type="file" id="archiveUploadInput" accept="application/pdf" style="display:none" onchange="handleArchiveUpload(event)">
+    </div>
     <!-- 一括操作バー（選択時のみ表示） -->
     <div id="archiveBulkBar" style="display:none;">
       <div class="archive-bulk-bar">
@@ -1903,11 +1915,12 @@ async function renderArchive(){
 function renderArchiveItem(r){
   const d = new Date(r.savedAt);
   const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  const typeLabel = r.type === 'receipt' ? '領収書添付' : 'サイン収集';
-  const typeClass = r.type === 'receipt' ? 'receipt' : 'sign';
+  const typeLabel = r.type === 'receipt' ? '領収書添付' : r.type === 'upload' ? '直接追加' : 'サイン収集';
+  const typeClass = r.type === 'receipt' ? 'receipt' : r.type === 'upload' ? 'upload' : 'sign';
   const checked = archiveSelectedIds.has(r.id);
+  const confirmed = r.confirmed === true;
   return `
-    <div class="archive-item" id="aitem_${r.id}">
+    <div class="archive-item${confirmed?' confirmed':''}" id="aitem_${r.id}">
       <div class="archive-item-check${checked?' checked':''}" onclick="toggleArchiveSelect('${r.id}')"></div>
       <div class="archive-item-info" onclick="toggleArchiveSelect('${r.id}')">
         <div class="archive-item-name">${escHtml(r.filename)}</div>
@@ -1917,6 +1930,7 @@ function renderArchiveItem(r){
         </div>
       </div>
       <div class="archive-item-actions">
+        <button class="archive-item-confirm${confirmed?' confirmed':''}" onclick="toggleConfirmed('${r.id}', ${confirmed})" title="${confirmed?'確認済み':'未確認'}">✅</button>
         <button class="archive-item-dl" onclick="downloadArchiveItem('${r.id}')">⬇</button>
         <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
       </div>
@@ -1993,6 +2007,47 @@ async function downloadSelectedArchive(){
       // 複数ファイル: 少し間隔を空ける
       if(ids.length > 1) await new Promise(r => setTimeout(r, 300));
     }catch(e){ console.warn('DL error for id', id, e); }
+  }
+}
+
+async function toggleConfirmed(id, currentState){
+  try{
+    const db = await getFirestore();
+    await db.collection('vouchers').doc(id).update({ confirmed: !currentState });
+    // UIだけ即時更新（再描画不要）
+    const item = document.getElementById('aitem_' + id);
+    const btn  = item ? item.querySelector('.archive-item-confirm') : null;
+    if(item && btn){
+      const next = !currentState;
+      item.classList.toggle('confirmed', next);
+      btn.classList.toggle('confirmed', next);
+      btn.title = next ? '確認済み' : '未確認';
+    }
+  }catch(e){
+    alert('更新に失敗しました: ' + e.message);
+  }
+}
+
+async function handleArchiveUpload(event){
+  const file = event.target.files[0];
+  event.target.value = ''; // 同じファイルを再度選べるようにリセット
+  if(!file || file.type !== 'application/pdf') return;
+
+  const list = document.getElementById('archiveList');
+  // 読み込み中表示
+  const notice = document.createElement('div');
+  notice.style.cssText = 'text-align:center;padding:10px;color:#7c3aed;font-size:13px;font-weight:700;';
+  notice.textContent = '📤 アップロード中...';
+  list.prepend(notice);
+
+  try{
+    const ab = await file.arrayBuffer();
+    const bytes = new Uint8Array(ab);
+    await saveToArchive(bytes, file.name, 'upload');
+    await renderArchive();
+  }catch(e){
+    notice.remove();
+    alert('アップロードに失敗しました: ' + e.message);
   }
 }
 
