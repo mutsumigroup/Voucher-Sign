@@ -188,7 +188,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-item-dl{padding:6px 10px;border-radius:8px;border:1.5px solid #7c3aed;background:#fff;color:#7c3aed;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .archive-item-dl:active{background:#7c3aed;color:#fff;}
 .archive-item-del{padding:6px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
-.archive-item-del:active{background:#dc2626;color:#fff;}
+.archive-item-del:active{background:#fca5a5;}
 .archive-bulk-bar{background:#7c3aed;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .archive-bulk-count{font-size:14px;font-weight:800;color:#fff;}
 .archive-bulk-dl{background:#fff;color:#7c3aed;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;}
@@ -282,7 +282,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
             <li>「署名済み一覧」機能を追加：ダウンロードしたPDFをデバイス内に保存</li>
             <li>月別グループ表示・個別選択・一括ダウンロード対応</li>
             <li>サイン収集モード・領収書添付モード両方から保存可能</li>
-            <li>IndexedDBを使用（大容量のPDFも安定して保存）</li>
+            <li>Firebaseクラウドに保存（全端末で共有・同期）</li>
           </ul>
         </div>
         <div class="version-item">
@@ -1701,44 +1701,78 @@ function escHtml(s){
 }
 
 /* ══════════════════════════════════════════════
-   IndexedDB アーカイブ機能
+   Firebase Firestore アーカイブ機能（全端末共有）
    ══════════════════════════════════════════════ */
 
-const DB_NAME = 'VoucherSignArchive';
-const DB_VER  = 1;
-const STORE   = 'pdfs';
+// Firebase設定
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAHyk1paQzrD6_8nQfELCz9NX2H_nCYKNQ",
+  authDomain: "voucher-sign.firebaseapp.com",
+  projectId: "voucher-sign",
+  storageBucket: "voucher-sign.firebasestorage.app",
+  messagingSenderId: "891258466774",
+  appId: "1:891258466774:web:2826292646d6408e337477"
+};
 
-function openDB(){
+let _fbApp = null;
+let _fbDb  = null;
+
+async function getFirestore(){
+  if(_fbDb) return _fbDb;
+  // Firebase SDKをCDNから動的ロード
+  if(!window.firebase_imported){
+    window.firebase_imported = true;
+    await Promise.all([
+      loadScript('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js'),
+      loadScript('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js')
+    ]);
+  }
+  if(!_fbApp){
+    _fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+  }
+  _fbDb = firebase.firestore(_fbApp);
+  return _fbDb;
+}
+
+function loadScript(src){
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if(!db.objectStoreNames.contains(STORE)){
-        const store = db.createObjectStore(STORE, {keyPath:'id', autoIncrement:true});
-        store.createIndex('savedAt','savedAt',{unique:false});
-      }
-    };
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror   = e => reject(e.target.error);
+    if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
   });
+}
+
+// pdfBytesをbase64文字列に変換（Firestoreに保存するため）
+function uint8ToBase64(u8){
+  let bin = '';
+  for(let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+  return btoa(bin);
+}
+
+// base64文字列をUint8Arrayに戻す
+function base64ToUint8(b64){
+  const bin = atob(b64);
+  const u8  = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
 }
 
 async function saveToArchive(pdfBytes, filename, type){
   // type: 'sign' | 'receipt'
   try{
-    const db = await openDB();
+    const db = await getFirestore();
+    const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
     const record = {
       filename,
       type,
       savedAt: new Date().toISOString(),
-      pdfBytes: pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes)
+      pdfBase64: uint8ToBase64(bytes)
     };
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      const req = tx.objectStore(STORE).add(record);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror   = () => reject(req.error);
-    });
+    const ref = await db.collection('vouchers').add(record);
+    return ref.id;
   }catch(e){
     console.error('saveToArchive error:', e);
     throw e;
@@ -1747,35 +1781,39 @@ async function saveToArchive(pdfBytes, filename, type){
 
 async function getAllArchive(){
   try{
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx  = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror   = () => reject(req.error);
-    });
-  }catch(e){ return []; }
+    const db = await getFirestore();
+    const snap = await db.collection('vouchers').orderBy('savedAt','desc').get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }catch(e){
+    console.error('getAllArchive error:', e);
+    return [];
+  }
 }
 
 async function getArchiveById(id){
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx  = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).get(id);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror   = () => reject(req.error);
-  });
+  try{
+    const db = await getFirestore();
+    const doc = await db.collection('vouchers').doc(id).get();
+    if(!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
+  }catch(e){
+    console.error('getArchiveById error:', e);
+    return null;
+  }
 }
 
 async function deleteArchiveIds(ids){
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx    = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    ids.forEach(id => store.delete(id));
-    tx.oncomplete = () => resolve();
-    tx.onerror    = () => reject(tx.error);
-  });
+  try{
+    const db = await getFirestore();
+    const batch = db.batch();
+    for(const id of ids){
+      batch.delete(db.collection('vouchers').doc(id));
+    }
+    await batch.commit();
+  }catch(e){
+    console.error('deleteArchiveIds error:', e);
+    throw e;
+  }
 }
 
 /* ── アーカイブ画面 ── */
@@ -1870,8 +1908,8 @@ function renderArchiveItem(r){
   const checked = archiveSelectedIds.has(r.id);
   return `
     <div class="archive-item" id="aitem_${r.id}">
-      <div class="archive-item-check${checked?' checked':''}" onclick="toggleArchiveSelect(${r.id})"></div>
-      <div class="archive-item-info" onclick="toggleArchiveSelect(${r.id})">
+      <div class="archive-item-check${checked?' checked':''}" onclick="toggleArchiveSelect('${r.id}')"></div>
+      <div class="archive-item-info" onclick="toggleArchiveSelect('${r.id}')">
         <div class="archive-item-name">${escHtml(r.filename)}</div>
         <div class="archive-item-meta">
           <span class="archive-item-type ${typeClass}">${typeLabel}</span>
@@ -1879,19 +1917,10 @@ function renderArchiveItem(r){
         </div>
       </div>
       <div class="archive-item-actions">
-        <button class="archive-item-dl" onclick="downloadArchiveItem(${r.id})">⬇</button>
-        <button class="archive-item-del" onclick="deleteSingleArchive(${r.id})">🗑</button>
+        <button class="archive-item-dl" onclick="downloadArchiveItem('${r.id}')">⬇</button>
+        <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
       </div>
     </div>`;
-}
-
-async function deleteSingleArchive(id){
-  if(!confirm('この1件を削除しますか？')) return;
-  await deleteArchiveIds([id]);
-  archiveSelectedIds.delete(id);
-  updateArchiveBulkBar();
-  // アイテム行だけ消してUIを更新（月ごと再描画）
-  await renderArchive();
 }
 
 function toggleMonthItems(monthId){
@@ -1942,7 +1971,8 @@ async function downloadArchiveItem(id){
   try{
     const r = await getArchiveById(id);
     if(!r) return;
-    const blob = new Blob([r.pdfBytes], {type:'application/pdf'});
+    const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : (r.pdfBytes || new Uint8Array());
+    const blob = new Blob([bytes], {type:'application/pdf'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url;
@@ -1964,6 +1994,14 @@ async function downloadSelectedArchive(){
       if(ids.length > 1) await new Promise(r => setTimeout(r, 300));
     }catch(e){ console.warn('DL error for id', id, e); }
   }
+}
+
+async function deleteSingleArchive(id){
+  if(!confirm('この1件を削除しますか？')) return;
+  await deleteArchiveIds([id]);
+  archiveSelectedIds.delete(id);
+  updateArchiveBulkBar();
+  await renderArchive();
 }
 
 async function deleteSelectedArchive(){
