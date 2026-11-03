@@ -2011,20 +2011,29 @@ async function downloadSelectedArchive(){
 }
 
 async function toggleConfirmed(id, currentState){
+  const next = !currentState;
+  // 即座にUI更新（タイムラグなし）
+  const item = document.getElementById('aitem_' + id);
+  const btn  = item ? item.querySelector('.archive-item-confirm') : null;
+  if(item && btn){
+    item.classList.toggle('confirmed', next);
+    btn.classList.toggle('confirmed', next);
+    btn.title = next ? '確認済み' : '未確認';
+    // onclick属性を更新して次回クリック時の状態を反転
+    btn.setAttribute('onclick', `toggleConfirmed('${id}', ${next})`);
+  }
+  // バックグラウンドでFirebaseに保存
   try{
     const db = await getFirestore();
-    await db.collection('vouchers').doc(id).update({ confirmed: !currentState });
-    // UIだけ即時更新（再描画不要）
-    const item = document.getElementById('aitem_' + id);
-    const btn  = item ? item.querySelector('.archive-item-confirm') : null;
-    if(item && btn){
-      const next = !currentState;
-      item.classList.toggle('confirmed', next);
-      btn.classList.toggle('confirmed', next);
-      btn.title = next ? '確認済み' : '未確認';
-    }
+    db.collection('vouchers').doc(id).update({ confirmed: next });
   }catch(e){
-    alert('更新に失敗しました: ' + e.message);
+    // 失敗したらUIを元に戻す
+    if(item && btn){
+      item.classList.toggle('confirmed', currentState);
+      btn.classList.toggle('confirmed', currentState);
+      btn.setAttribute('onclick', `toggleConfirmed('${id}', ${currentState})`);
+    }
+    console.error('確認状態の保存に失敗:', e);
   }
 }
 
