@@ -583,26 +583,6 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   </div>
 </div>
 
-<!-- 日付選択モーダル（最初からHTML内に存在させる） -->
-<div id="datePickerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:2147483647;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:16px;padding:24px 20px;width:min(320px,88vw);box-shadow:0 8px 32px rgba(0,0,0,0.25);">
-    <div style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">📅 日付を設定</div>
-    <div id="datePickerFilename" style="font-size:12px;color:#6b7280;margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-    <label style="font-size:13px;color:#374151;font-weight:600;display:block;margin-bottom:6px;">書類の日付</label>
-    <input type="date" id="datePickerInput"
-      style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:16px;color:#1e1b4b;outline:none;margin-bottom:20px;-webkit-appearance:none;appearance:none;">
-    <div style="display:flex;gap:10px;">
-      <button onclick="datePickerCancel()"
-        style="flex:1;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">
-        キャンセル
-      </button>
-      <button onclick="datePickerConfirm()"
-        style="flex:1;padding:12px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">
-        追加する
-      </button>
-    </div>
-  </div>
-</div>
 
 <div class="sign-overlay" id="signOverlay">
   <div class="sign-preview-area" id="previewArea">
@@ -2095,21 +2075,28 @@ async function handleArchiveUpload(event){
   document.getElementById('datePickerInput').value = todayStr;
   document.getElementById('datePickerFilename').textContent = fileName;
 
-  // モーダルを表示（display:noneをflexに変えるだけ）
+  // モーダルを表示（visibility+opacityで制御、displayは常にflex）
   const overlay = document.getElementById('datePickerOverlay');
-  overlay.style.display = 'flex';
+  overlay.style.visibility = 'visible';
+  overlay.style.opacity = '1';
+  overlay.style.pointerEvents = 'auto';
 }
 
 function datePickerConfirm(){
   const overlay = document.getElementById('datePickerOverlay');
   const val = document.getElementById('datePickerInput').value;
-  overlay.style.display = 'none';
+  overlay.style.visibility = 'hidden';
+  overlay.style.opacity = '0';
+  overlay.style.pointerEvents = 'none';
   if(_datePickerFile) _doUploadWithDate(_datePickerFile, val);
   _datePickerFile = null;
 }
 
 function datePickerCancel(){
-  document.getElementById('datePickerOverlay').style.display = 'none';
+  const overlay = document.getElementById('datePickerOverlay');
+  overlay.style.visibility = 'hidden';
+  overlay.style.opacity = '0';
+  overlay.style.pointerEvents = 'none';
   _datePickerFile = null;
 }
 
@@ -2194,5 +2181,25 @@ async function saveReceiptAttachToArchive(){
 showScreen('upload');
 
 </script>
+<!-- 日付選択モーダル: bodyの最後、全要素より前面 -->
+<div id="datePickerOverlay" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:2147483647;display:flex;align-items:center;justify-content:center;transition:opacity 0.15s;">
+  <div style="background:#fff;border-radius:16px;padding:24px 20px;width:88vw;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+    <div style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">📅 日付を設定</div>
+    <div id="datePickerFilename" style="font-size:12px;color:#6b7280;margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;"></div>
+    <label style="font-size:13px;color:#374151;font-weight:600;display:block;margin-bottom:6px;">書類の日付</label>
+    <input type="date" id="datePickerInput"
+      style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:16px;color:#1e1b4b;background:#fff;outline:none;margin-bottom:20px;">
+    <div style="display:flex;gap:10px;">
+      <button onclick="datePickerCancel()"
+        style="flex:1;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;">
+        キャンセル
+      </button>
+      <button onclick="datePickerConfirm()"
+        style="flex:1;padding:12px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;">
+        追加する
+      </button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
