@@ -156,6 +156,55 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .filename-input{flex:1;border:1.5px solid #d1dce8;border-radius:8px;padding:9px 10px;font-size:14px;font-weight:600;color:#1e293b;background:#fff;outline:none;min-width:0;}
 .filename-input:focus{border-color:#0ea5e9;}
 .filename-ext{font-size:13px;font-weight:700;color:#64748b;white-space:nowrap;}
+
+/* ── 署名済み一覧 ── */
+.archive-btn{width:100%;padding:14px 16px;border-radius:14px;border:2px solid #7c3aed;background:#fff;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .15s,background .15s;-webkit-user-select:none;user-select:none;text-align:left;}
+.archive-btn:active{opacity:.85;}
+.archive-btn-icon{font-size:28px;flex-shrink:0;}
+.archive-btn-title{font-size:15px;font-weight:800;color:#1e293b;}
+.archive-btn-sub{font-size:12px;color:#64748b;margin-top:2px;line-height:1.4;}
+.archive-screen{display:none;flex-direction:column;gap:12px;}
+.archive-month-card{background:#fff;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;-webkit-user-select:none;user-select:none;}
+.archive-month-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8fafc;}
+.archive-month-header:active{background:#f1f5f9;}
+.archive-month-title{font-size:15px;font-weight:800;color:#1e293b;}
+.archive-month-count{font-size:12px;font-weight:600;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:10px;}
+.archive-month-arrow{font-size:12px;color:#94a3b8;transition:transform .2s;}
+.archive-month-arrow.open{transform:rotate(180deg);}
+.archive-month-items{display:none;border-top:1px solid var(--border);}
+.archive-month-items.open{display:block;}
+.archive-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f1f5f9;-webkit-user-select:none;user-select:none;}
+.archive-item:last-child{border-bottom:none;}
+.archive-item-check{width:22px;height:22px;border:2px solid #d1dce8;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,border-color .15s;}
+.archive-item-check.checked{background:#7c3aed;border-color:#7c3aed;}
+.archive-item-check.checked::after{content:'✓';color:#fff;font-size:13px;font-weight:900;}
+.archive-item-info{flex:1;min-width:0;cursor:pointer;}
+.archive-item-name{font-size:13px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.archive-item-meta{font-size:11px;color:#64748b;margin-top:2px;display:flex;align-items:center;gap:6px;}
+.archive-item-type{padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;}
+.archive-item-type.sign{background:#dbeafe;color:#1d4ed8;}
+.archive-item-type.receipt{background:#fef3c7;color:#92400e;}
+.archive-item-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.archive-item-dl{padding:6px 10px;border-radius:8px;border:1.5px solid #7c3aed;background:#fff;color:#7c3aed;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.archive-item-dl:active{background:#7c3aed;color:#fff;}
+.archive-item-del{padding:6px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.archive-item-del:active{background:#dc2626;color:#fff;}
+.archive-bulk-bar{background:#7c3aed;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.archive-bulk-count{font-size:14px;font-weight:800;color:#fff;}
+.archive-bulk-dl{background:#fff;color:#7c3aed;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;}
+.archive-bulk-dl:active{opacity:.8;}
+.archive-empty{text-align:center;padding:40px 20px;color:#94a3b8;}
+.archive-empty-icon{font-size:40px;margin-bottom:12px;}
+.archive-empty-text{font-size:14px;font-weight:700;}
+.archive-empty-sub{font-size:12px;margin-top:4px;line-height:1.5;}
+.archive-select-all-row{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;}
+.archive-select-all-btn{background:none;border:1.5px solid #d1dce8;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;}
+.archive-select-all-btn:active{opacity:.7;}
+.archive-del-btn{background:none;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;color:#dc2626;cursor:pointer;}
+.archive-del-btn:active{opacity:.7;}
+.save-to-archive-btn{width:100%;padding:12px;border-radius:10px;border:2px solid #7c3aed;background:#faf5ff;color:#7c3aed;font-size:14px;font-weight:800;cursor:pointer;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.save-to-archive-btn:active{background:#7c3aed;color:#fff;}
+.save-to-archive-btn:disabled{border-color:#d1dce8;background:#f8fafc;color:#94a3b8;cursor:default;}
 </style>
 </head>
 <body>
@@ -189,6 +238,13 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="mode-btn-sub">サイン済みVoucher PDFに領収書を追加</div>
         </div>
       </div>
+      <div class="archive-btn" onclick="showArchive()">
+        <div class="archive-btn-icon">📂</div>
+        <div class="mode-btn-text">
+          <div class="archive-btn-title">署名済み一覧</div>
+          <div class="archive-btn-sub">保存済みのPDFを月別に確認・ダウンロード</div>
+        </div>
+      </div>
     </div>
 
     <!-- サインモード：PDFアップロード -->
@@ -211,11 +267,36 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v3.0</span>
+          <span class="version-current">v4.0</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.0</span>
+            <span class="ver-date">2026/11/03</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「署名済み一覧」機能を追加：ダウンロードしたPDFをデバイス内に保存</li>
+            <li>月別グループ表示・個別選択・一括ダウンロード対応</li>
+            <li>サイン収集モード・領収書添付モード両方から保存可能</li>
+            <li>IndexedDBを使用（大容量のPDFも安定して保存）</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v3.1</span>
+            <span class="ver-date">2026/10/05</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>Linearized PDF（最適化PDF）を%%EOFで誤って切り捨ててしまう問題を修正</li>
+            <li>先頭1024バイト内の /Linearized 検出でPDF種別を自動判定し、切り捨て処理をスキップ</li>
+            <li>MERCURY_LEADER等のLinearized形式PDFが正常に読み込めるよう修正</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v3.0</span>
@@ -425,6 +506,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <button class="ra-dl-btn" id="raDlBtn" onclick="attachReceiptToPDF()">
       <span>📎</span><span id="raDlBtnText">PDFと領収書を選択してください</span>
     </button>
+    <button class="save-to-archive-btn" id="raArchiveBtn" disabled onclick="saveReceiptAttachToArchive()">📂 署名済み一覧に保存</button>
     <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
   </div>
 
@@ -465,7 +547,27 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       </div>
     </div>
 
+    <button class="save-to-archive-btn" id="saveToArchiveBtn" disabled onclick="saveCurrentToArchive()">📂 署名済み一覧に保存</button>
     <button class="reset-btn" onclick="resetApp()">&#8635; 別のPDFを読み込む</button>
+  </div>
+
+  <!-- 署名済み一覧スクリーン -->
+  <div class="archive-screen" id="archiveScreen">
+    <div class="sec-label">📂 署名済み一覧</div>
+    <!-- 一括操作バー（選択時のみ表示） -->
+    <div id="archiveBulkBar" style="display:none;">
+      <div class="archive-bulk-bar">
+        <span class="archive-bulk-count" id="archiveBulkCount">0件選択中</span>
+        <button class="archive-bulk-dl" onclick="downloadSelectedArchive()">⬇ まとめてダウンロード</button>
+      </div>
+    </div>
+    <!-- 全選択/削除バー -->
+    <div class="archive-select-all-row" id="archiveSelectAllRow" style="display:none;">
+      <button class="archive-select-all-btn" onclick="toggleSelectAll()">☑ 全て選択</button>
+      <button class="archive-del-btn" onclick="deleteSelectedArchive()">🗑 選択削除</button>
+    </div>
+    <div id="archiveList"></div>
+    <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
   </div>
 </div>
 
@@ -861,14 +963,24 @@ function showScreen(n){
   document.getElementById('processingScreen').style.display= n==='processing' ?'flex':'none';
   document.getElementById('appScreen').style.display       = n==='app'        ?'flex':'none';
   document.getElementById('headerBadge').style.display     = n==='app'        ?''   :'none';
+  // アーカイブ・受領スクリーンはupload配下にあるため、upload表示時のみ制御
+  if(n!=='upload'){
+    const as=document.getElementById('archiveScreen');
+    if(as) as.style.display='none';
+  }
 }
 function setProc(m){document.getElementById('procLabel').textContent=m;}
 
 function resetApp(){
   if(!confirm('別のPDFを読み込みますか？\n現在のサインはすべてリセットされます。'))return;
-  pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null; document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書を追加</div><div class='receipt-sub'>JPG / PNG / PDF 対応</div><label style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;'>📂 ファイルを選択<input type='file' id='receiptInput' accept='image/*,application/pdf' style='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;'></label>`;
+  pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null;
+  _lastSignedPdfBytes=null; _lastSignedFilename=null;
+  document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書を追加</div><div class='receipt-sub'>JPG / PNG / PDF 対応</div><label style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;'>📂 ファイルを選択<input type='file' id='receiptInput' accept='image/*,application/pdf' style='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;'></label>`;
   document.getElementById('fileInput').value='';
+  const archBtn=document.getElementById('saveToArchiveBtn');
+  if(archBtn){archBtn.disabled=true;archBtn.textContent='📂 署名済み一覧に保存';archBtn.style.cssText='';}
   showScreen('upload');
+  backToModeSelect();
 }
 
 /* ── モード切替 ── */
@@ -881,14 +993,6 @@ function showReceiptAttach(){
   document.getElementById('receiptAttachScreen').style.display='flex';
   document.getElementById('headerSub').textContent='領収書添付モード';
 }
-function backToModeSelect(){
-  document.getElementById('modeSelect').style.display='flex';
-  document.getElementById('signUploadArea').style.display='none';
-  document.getElementById('uploadScreen').style.display='flex';
-  document.getElementById('receiptAttachScreen').style.display='none';
-  document.getElementById('headerSub').textContent='PDFをアップロードして開始';
-}
-
 /* ── Receipt Attach Mode ── */
 let raVoucherBytes=null, raReceiptDataURL=null, raReceiptBytes=null, raReceiptMime=null;
 
@@ -1100,6 +1204,12 @@ async function attachReceiptToPDF(){
     const a=document.createElement('a');
     a.href=url; a.download=raFilename; a.click();
     URL.revokeObjectURL(url);
+
+    // アーカイブ保存用に保持
+    _lastReceiptPdfBytes = new Uint8Array(out);
+    _lastReceiptFilename = raFilename;
+    const raArchBtn = document.getElementById('raArchiveBtn');
+    if(raArchBtn){ raArchBtn.disabled=false; raArchBtn.textContent='📂 署名済み一覧に保存'; raArchBtn.style.cssText=''; }
 
     txt.textContent='ダウンロード完了 ✓';
     btn.className='ra-dl-btn ready';
@@ -1469,6 +1579,11 @@ async function downloadPDF(){
     const dlName=rawName.replace(/\.pdf$/i,'')+'.pdf';
     a.href=url; a.download=dlName; a.click();
     URL.revokeObjectURL(url);
+    // アーカイブ保存用に保持
+    _lastSignedPdfBytes = new Uint8Array(out);
+    _lastSignedFilename = dlName;
+    const archBtn = document.getElementById('saveToArchiveBtn');
+    if(archBtn){ archBtn.disabled=false; archBtn.textContent='📂 署名済み一覧に保存'; archBtn.style.cssText=''; }
     txt.textContent='ダウンロード完了 ✓';
     setTimeout(()=>{ txt.textContent='サイン済みPDFをダウンロード'; btn.disabled=false; },3000);
   }catch(err){
@@ -1583,6 +1698,325 @@ function b64ToU8(s){
 }
 function escHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ══════════════════════════════════════════════
+   IndexedDB アーカイブ機能
+   ══════════════════════════════════════════════ */
+
+const DB_NAME = 'VoucherSignArchive';
+const DB_VER  = 1;
+const STORE   = 'pdfs';
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(STORE)){
+        const store = db.createObjectStore(STORE, {keyPath:'id', autoIncrement:true});
+        store.createIndex('savedAt','savedAt',{unique:false});
+      }
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function saveToArchive(pdfBytes, filename, type){
+  // type: 'sign' | 'receipt'
+  try{
+    const db = await openDB();
+    const record = {
+      filename,
+      type,
+      savedAt: new Date().toISOString(),
+      pdfBytes: pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes)
+    };
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).add(record);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror   = () => reject(req.error);
+    });
+  }catch(e){
+    console.error('saveToArchive error:', e);
+    throw e;
+  }
+}
+
+async function getAllArchive(){
+  try{
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror   = () => reject(req.error);
+    });
+  }catch(e){ return []; }
+}
+
+async function getArchiveById(id){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function deleteArchiveIds(ids){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    ids.forEach(id => store.delete(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+/* ── アーカイブ画面 ── */
+let archiveSelectedIds = new Set();
+
+async function showArchive(){
+  document.getElementById('modeSelect').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  document.getElementById('archiveScreen').style.display='flex';
+  document.getElementById('headerSub').textContent='署名済み一覧';
+  archiveSelectedIds = new Set();
+  await renderArchive();
+}
+
+function backToModeSelect(){
+  // すべてのサブ画面を隠してモード選択に戻る
+  document.getElementById('signUploadArea').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  document.getElementById('receiptAttachScreen').style.display='none';
+  document.getElementById('archiveScreen').style.display='none';
+  document.getElementById('modeSelect').style.display='flex';
+  document.getElementById('headerSub').textContent='PDFをアップロードして開始';
+  archiveSelectedIds = new Set();
+  updateArchiveBulkBar();
+}
+
+async function renderArchive(){
+  const list = document.getElementById('archiveList');
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">読み込み中...</div>';
+
+  const records = await getAllArchive();
+
+  if(records.length === 0){
+    list.innerHTML = `
+      <div class="archive-empty">
+        <div class="archive-empty-icon">📭</div>
+        <div class="archive-empty-text">保存されたPDFはありません</div>
+        <div class="archive-empty-sub">サイン収集または領収書添付後に<br>「署名済み一覧に保存」ボタンで保存できます</div>
+      </div>`;
+    document.getElementById('archiveSelectAllRow').style.display = 'none';
+    return;
+  }
+
+  // 月別グループ化
+  const byMonth = new Map();
+  for(const r of records){
+    const d = new Date(r.savedAt);
+    const key = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    if(!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(r);
+  }
+  // 新しい月順にソート
+  const sortedMonths = [...byMonth.entries()].sort((a,b) => {
+    const da = new Date(a[1][0].savedAt), db2 = new Date(b[1][0].savedAt);
+    return db2 - da;
+  });
+
+  list.innerHTML = '';
+  let openFirst = true;
+  for(const [month, items] of sortedMonths){
+    // 月内は新しい順
+    const sorted = [...items].sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+    const monthId = 'month_' + month.replace(/[年月]/g,'_');
+
+    const card = document.createElement('div');
+    card.className = 'archive-month-card';
+    const isOpen = openFirst;
+    openFirst = false;
+    card.innerHTML = `
+      <div class="archive-month-header" onclick="toggleMonthItems('${monthId}')">
+        <div class="archive-month-title">${escHtml(month)}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="archive-month-count">${sorted.length}件</span>
+          <span class="archive-month-arrow${isOpen?' open':''}" id="${monthId}_arrow">▼</span>
+        </div>
+      </div>
+      <div class="archive-month-items${isOpen?' open':''}" id="${monthId}">
+        ${sorted.map(r => renderArchiveItem(r)).join('')}
+      </div>`;
+    list.appendChild(card);
+  }
+
+  document.getElementById('archiveSelectAllRow').style.display = 'flex';
+  updateArchiveBulkBar();
+}
+
+function renderArchiveItem(r){
+  const d = new Date(r.savedAt);
+  const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const typeLabel = r.type === 'receipt' ? '領収書添付' : 'サイン収集';
+  const typeClass = r.type === 'receipt' ? 'receipt' : 'sign';
+  const checked = archiveSelectedIds.has(r.id);
+  return `
+    <div class="archive-item" id="aitem_${r.id}">
+      <div class="archive-item-check${checked?' checked':''}" onclick="toggleArchiveSelect(${r.id})"></div>
+      <div class="archive-item-info" onclick="toggleArchiveSelect(${r.id})">
+        <div class="archive-item-name">${escHtml(r.filename)}</div>
+        <div class="archive-item-meta">
+          <span class="archive-item-type ${typeClass}">${typeLabel}</span>
+          <span>${dateStr}</span>
+        </div>
+      </div>
+      <div class="archive-item-actions">
+        <button class="archive-item-dl" onclick="downloadArchiveItem(${r.id})">⬇</button>
+        <button class="archive-item-del" onclick="deleteSingleArchive(${r.id})">🗑</button>
+      </div>
+    </div>`;
+}
+
+async function deleteSingleArchive(id){
+  if(!confirm('この1件を削除しますか？')) return;
+  await deleteArchiveIds([id]);
+  archiveSelectedIds.delete(id);
+  updateArchiveBulkBar();
+  // アイテム行だけ消してUIを更新（月ごと再描画）
+  await renderArchive();
+}
+
+function toggleMonthItems(monthId){
+  const el    = document.getElementById(monthId);
+  const arrow = document.getElementById(monthId + '_arrow');
+  if(!el) return;
+  const isOpen = el.classList.contains('open');
+  el.classList.toggle('open', !isOpen);
+  if(arrow) arrow.classList.toggle('open', !isOpen);
+}
+
+function toggleArchiveSelect(id){
+  if(archiveSelectedIds.has(id)){
+    archiveSelectedIds.delete(id);
+  } else {
+    archiveSelectedIds.add(id);
+  }
+  // チェックボックスのUI更新
+  const chk = document.querySelector(`#aitem_${id} .archive-item-check`);
+  if(chk) chk.className = 'archive-item-check' + (archiveSelectedIds.has(id) ? ' checked' : '');
+  updateArchiveBulkBar();
+}
+
+function updateArchiveBulkBar(){
+  const n = archiveSelectedIds.size;
+  const bulkBar  = document.getElementById('archiveBulkBar');
+  const bulkCount = document.getElementById('archiveBulkCount');
+  if(bulkBar){
+    bulkBar.style.display  = n > 0 ? 'block' : 'none';
+    if(bulkCount) bulkCount.textContent = `${n}件選択中`;
+  }
+}
+
+async function toggleSelectAll(){
+  const records = await getAllArchive();
+  if(archiveSelectedIds.size === records.length){
+    // 全解除
+    archiveSelectedIds = new Set();
+  } else {
+    // 全選択
+    archiveSelectedIds = new Set(records.map(r => r.id));
+  }
+  // UI再描画（renderArchiveで完全再描画）
+  await renderArchive();
+}
+
+async function downloadArchiveItem(id){
+  try{
+    const r = await getArchiveById(id);
+    if(!r) return;
+    const blob = new Blob([r.pdfBytes], {type:'application/pdf'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = r.filename.endsWith('.pdf') ? r.filename : r.filename + '.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('ダウンロードに失敗しました: ' + e.message);
+  }
+}
+
+async function downloadSelectedArchive(){
+  if(archiveSelectedIds.size === 0) return;
+  const ids = [...archiveSelectedIds];
+  for(const id of ids){
+    try{
+      await downloadArchiveItem(id);
+      // 複数ファイル: 少し間隔を空ける
+      if(ids.length > 1) await new Promise(r => setTimeout(r, 300));
+    }catch(e){ console.warn('DL error for id', id, e); }
+  }
+}
+
+async function deleteSelectedArchive(){
+  if(archiveSelectedIds.size === 0) return;
+  const n = archiveSelectedIds.size;
+  if(!confirm(`選択中の${n}件を削除しますか？`)) return;
+  await deleteArchiveIds([...archiveSelectedIds]);
+  archiveSelectedIds = new Set();
+  await renderArchive();
+}
+
+/* ── サイン収集モードからアーカイブ保存 ── */
+let _lastSignedPdfBytes = null; // downloadPDF後に保持
+let _lastSignedFilename = null;
+
+async function saveCurrentToArchive(){
+  if(!_lastSignedPdfBytes) return;
+  const btn = document.getElementById('saveToArchiveBtn');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try{
+    await saveToArchive(_lastSignedPdfBytes, _lastSignedFilename, 'sign');
+    btn.textContent = '✓ 保存しました';
+    btn.style.background = '#dcfce7';
+    btn.style.borderColor = '#16a34a';
+    btn.style.color = '#15803d';
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = '📂 署名済み一覧に保存';
+    alert('保存に失敗しました: ' + e.message);
+  }
+}
+
+/* ── 領収書添付モードからアーカイブ保存 ── */
+let _lastReceiptPdfBytes = null;
+let _lastReceiptFilename = null;
+
+async function saveReceiptAttachToArchive(){
+  if(!_lastReceiptPdfBytes) return;
+  const btn = document.getElementById('raArchiveBtn');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try{
+    await saveToArchive(_lastReceiptPdfBytes, _lastReceiptFilename, 'receipt');
+    btn.textContent = '✓ 保存しました';
+    btn.style.background = '#dcfce7';
+    btn.style.borderColor = '#16a34a';
+    btn.style.color = '#15803d';
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = '📂 署名済み一覧に保存';
+    alert('保存に失敗しました: ' + e.message);
+  }
 }
 
 showScreen('upload');
