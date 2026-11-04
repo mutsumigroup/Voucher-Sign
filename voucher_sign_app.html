@@ -120,6 +120,27 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .s-btn-save{background:var(--blue);color:#fff;}
 .s-btn-save:disabled{background:#1e3a5f;color:#475569;}
 
+/* ── サイドパネル（縦向きデフォルト：上に積む） ── */
+.sign-side-panel{display:flex;flex-direction:column;flex-shrink:0;}
+.sign-preview-area{position:relative;overflow:hidden;background:#f8fafc;height:110px;border-bottom:2px solid var(--blue);}
+
+/* ── 横向きサイン画面（スマホ横向き） ── */
+@media (orientation: landscape) and (max-height: 540px) {
+  .sign-overlay.open{flex-direction:row;}
+  /* 左サイドパネル: 縦に並んでプレビュー＋名前 */
+  .sign-side-panel{width:200px;flex-shrink:0;border-right:2px solid var(--blue);}
+  .sign-preview-area{height:auto;flex:1;border-bottom:1px solid #1e3a5f;}
+  /* 名前バーを横向き時もコンパクトに */
+  .sign-name-bar{padding:8px 12px;flex-direction:column;align-items:flex-start;gap:4px;}
+  #signTip{display:none;}
+  /* キャンバスエリア: フル高さ */
+  .sign-canvas-area{max-height:none;padding:8px 10px;}
+  .canvas-inner{max-height:none;}
+  /* ボタンを縦並び */
+  .sign-btns{flex-direction:column;gap:6px;}
+  .sign-btns .s-btn{padding:10px 8px;font-size:13px;}
+}
+
 /* ── モード選択 ── */
 .mode-select{display:flex;flex-direction:column;gap:10px;}
 .mode-label{font-size:13px;font-weight:800;color:#64748b;text-align:center;text-transform:uppercase;letter-spacing:.07em;}
@@ -593,17 +614,21 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
 
 <div class="sign-overlay" id="signOverlay">
-  <div class="sign-preview-area" id="previewArea">
-    <img id="previewImg" src="" alt="">
-    <div class="sign-row-hl" id="rowHl"></div>
-  </div>
-  <div class="sign-name-bar">
-    <div class="sign-name-label">
-      <div class="sign-person-name" id="overlayName">—</div>
-      <div class="sign-person-rank" id="overlayRank">—</div>
+  <!-- 左サイドパネル（横向き時にプレビュー＋名前を表示） -->
+  <div class="sign-side-panel">
+    <div class="sign-preview-area" id="previewArea">
+      <img id="previewImg" src="" alt="">
+      <div class="sign-row-hl" id="rowHl"></div>
     </div>
-    <div class="sign-tip">✍ Sign below</div>
+    <div class="sign-name-bar" id="signNameBar">
+      <div class="sign-name-label">
+        <div class="sign-person-name" id="overlayName">—</div>
+        <div class="sign-person-rank" id="overlayRank">—</div>
+      </div>
+      <div class="sign-tip" id="signTip">✍ Sign below</div>
+    </div>
   </div>
+  <!-- キャンバスエリア -->
   <div class="sign-canvas-area">
     <div class="canvas-inner" id="canvasInner">
       <canvas id="sigCanvas"></canvas>
@@ -1325,7 +1350,10 @@ function updatePreview(){
   img.style.cssText=`width:${imgW}px;height:${imgH}px;left:${left}px;top:${top}px;`;
   hl.style.cssText=`left:${currentCrew.sigXS*imgW+left}px;top:${currentCrew.rowY*imgH+top}px;width:${(currentCrew.sigXE-currentCrew.sigXS)*imgW}px;height:${currentCrew.rowH*imgH}px;`;
 }
-window.addEventListener('resize',updatePreview);
+window.addEventListener('resize', ()=>{ updatePreview(); resizeCanvas(); });
+window.addEventListener('orientationchange', ()=>{
+  setTimeout(()=>{ updatePreview(); resizeCanvas(); }, 300);
+});
 
 /* ── CANVAS ── */
 function setupCanvas(){
