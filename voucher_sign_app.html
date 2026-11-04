@@ -120,25 +120,57 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .s-btn-save{background:var(--blue);color:#fff;}
 .s-btn-save:disabled{background:#1e3a5f;color:#475569;}
 
-/* ── サイドパネル（縦向きデフォルト：上に積む） ── */
+/* ── サイドパネル（縦横共通） ── */
 .sign-side-panel{display:flex;flex-direction:column;flex-shrink:0;}
+
+/* ── CSS回転による擬似横向きサイン画面 ── */
+/* .sign-overlay.rotated クラスで縦持ちのまま90度回転し横向き表示にする */
+.sign-overlay.rotated {
+  /* 画面の縦横を入れ替えてオーバーレイを回転 */
+  width: 100vh;
+  height: 100vw;
+  top: calc((100vh - 100vw) / 2);
+  left: calc((100vw - 100vh) / 2);
+  transform: rotate(90deg);
+  /* 横並びレイアウト */
+  flex-direction: row;
+}
+.sign-overlay.rotated .sign-side-panel {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 2px solid var(--blue);
+}
+.sign-overlay.rotated .sign-preview-area {
+  height: auto;
+  flex: 1;
+  border-bottom: 1px solid #1e3a5f;
+}
+.sign-overlay.rotated .sign-name-bar {
+  padding: 8px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.sign-overlay.rotated #signTip { display: none; }
+.sign-overlay.rotated .sign-canvas-area { max-height: none; padding: 8px 10px; }
+.sign-overlay.rotated .canvas-inner { max-height: none; }
+.sign-overlay.rotated .sign-btns { flex-direction: column; gap: 6px; }
+.sign-overlay.rotated .sign-btns .s-btn { padding: 10px 8px; font-size: 13px; }
+
+/* 通常の縦向きプレビューエリア */
 .sign-preview-area{position:relative;overflow:hidden;background:#f8fafc;height:110px;border-bottom:2px solid var(--blue);}
 
-/* ── 横向きサイン画面（スマホ横向き） ── */
+/* 実際に横向きの場合もサポート */
 @media (orientation: landscape) and (max-height: 540px) {
-  .sign-overlay.open{flex-direction:row;}
-  /* 左サイドパネル: 縦に並んでプレビュー＋名前 */
-  .sign-side-panel{width:200px;flex-shrink:0;border-right:2px solid var(--blue);}
-  .sign-preview-area{height:auto;flex:1;border-bottom:1px solid #1e3a5f;}
-  /* 名前バーを横向き時もコンパクトに */
-  .sign-name-bar{padding:8px 12px;flex-direction:column;align-items:flex-start;gap:4px;}
-  #signTip{display:none;}
-  /* キャンバスエリア: フル高さ */
-  .sign-canvas-area{max-height:none;padding:8px 10px;}
-  .canvas-inner{max-height:none;}
-  /* ボタンを縦並び */
-  .sign-btns{flex-direction:column;gap:6px;}
-  .sign-btns .s-btn{padding:10px 8px;font-size:13px;}
+  .sign-overlay.open:not(.rotated){flex-direction:row;}
+  .sign-overlay.open:not(.rotated) .sign-side-panel{width:200px;flex-shrink:0;border-right:2px solid var(--blue);}
+  .sign-overlay.open:not(.rotated) .sign-preview-area{height:auto;flex:1;border-bottom:1px solid #1e3a5f;}
+  .sign-overlay.open:not(.rotated) .sign-name-bar{padding:8px 12px;flex-direction:column;align-items:flex-start;gap:4px;}
+  .sign-overlay.open:not(.rotated) #signTip{display:none;}
+  .sign-overlay.open:not(.rotated) .sign-canvas-area{max-height:none;padding:8px 10px;}
+  .sign-overlay.open:not(.rotated) .canvas-inner{max-height:none;}
+  .sign-overlay.open:not(.rotated) .sign-btns{flex-direction:column;gap:6px;}
+  .sign-overlay.open:not(.rotated) .sign-btns .s-btn{padding:10px 8px;font-size:13px;}
 }
 
 /* ── モード選択 ── */
@@ -640,6 +672,12 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <button class="s-btn s-btn-cancel" onclick="closeOverlay()">Cancel</button>
       <button class="s-btn s-btn-clear" onclick="clearSig()">Clear</button>
       <button class="s-btn s-btn-save" id="saveBtn" onclick="saveSig()" disabled>Save</button>
+    </div>
+    <div style="text-align:center;margin-top:4px;">
+      <button id="rotateSignBtn" onclick="toggleSignRotate()"
+        style="background:none;border:none;color:#64748b;font-size:12px;cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:4px;margin:0 auto;">
+        <span style="font-size:16px;">⟳</span> 横向きで書く
+      </button>
     </div>
   </div>
 </div>
@@ -1330,9 +1368,27 @@ function openOverlay(no){
   document.body.style.overflow='hidden';
 }
 function closeOverlay(){
-  document.getElementById('signOverlay').classList.remove('open');
+  const overlay = document.getElementById('signOverlay');
+  overlay.classList.remove('open');
+  overlay.classList.remove('rotated');
   document.body.style.overflow='';
+  // ボタンテキストをリセット
+  const btn = document.getElementById('rotateSignBtn');
+  if(btn) btn.innerHTML = '<span style="font-size:16px;">⟳</span> 横向きで書く';
   currentCrew=null;
+}
+
+function toggleSignRotate(){
+  const overlay = document.getElementById('signOverlay');
+  const btn = document.getElementById('rotateSignBtn');
+  const isRotated = overlay.classList.toggle('rotated');
+  if(isRotated){
+    btn.innerHTML = '<span style="font-size:16px;">⟳</span> 縦向きに戻す';
+  } else {
+    btn.innerHTML = '<span style="font-size:16px;">⟳</span> 横向きで書く';
+  }
+  // レイアウト変更後にキャンバスをリサイズ
+  setTimeout(()=>{ resizeCanvas(); }, 50);
 }
 function updatePreview(){
   if(!currentCrew)return;
