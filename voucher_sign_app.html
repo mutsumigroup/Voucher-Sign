@@ -209,6 +209,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .filename-input:focus{border-color:#0ea5e9;}
 .filename-ext{font-size:13px;font-weight:700;color:#64748b;white-space:nowrap;}
 
+/* ── ダウンロード選択モーダル ── */
+#dlChoiceOverlay{visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:2147483647;display:flex;align-items:center;justify-content:center;transition:opacity 0.15s;padding:16px;box-sizing:border-box;}
+#dlChoiceOverlay.open{visibility:visible;opacity:1;pointer-events:auto;}
+.dlc-box{background:#fff;border-radius:16px;padding:20px;width:100%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.25);}
+.dlc-title{font-size:15px;font-weight:800;color:#1e1b4b;margin-bottom:4px;}
+.dlc-sub{font-size:12px;color:#6b7280;margin-bottom:16px;}
+.dlc-btn{width:100%;padding:14px 16px;border-radius:12px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;text-align:left;margin-bottom:10px;transition:border-color .15s,background .15s;-webkit-user-select:none;user-select:none;}
+.dlc-btn:last-of-type{margin-bottom:0;}
+.dlc-btn:active{background:#f1f5f9;}
+.dlc-btn-title{font-size:14px;font-weight:800;color:#1e293b;display:flex;align-items:center;gap:8px;}
+.dlc-btn-desc{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5;}
+.dlc-btn.btn-voucher-only{border-color:#d1dce8;}
+.dlc-btn.btn-embed{border-color:#f59e0b;background:#fffbeb;}
+.dlc-btn.btn-merge{border-color:#2563eb;background:#eff6ff;}
+.dlc-cancel{width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:13px;font-weight:700;cursor:pointer;}
+
 /* ── 署名済み一覧 ── */
 .archive-btn{width:100%;padding:14px 16px;border-radius:14px;border:2px solid #7c3aed;background:#fff;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .15s,background .15s;-webkit-user-select:none;user-select:none;text-align:left;}
 .archive-btn:active{opacity:.85;}
@@ -1574,79 +1590,126 @@ function saveSig(){
 }
 
 /* ── DOWNLOAD ── */
-async function downloadPDF(){
+/* ── サイン画像をPDFに描き込む共通処理 ── */
+async function _buildSignedDoc(){
+  const doc=await PDFLib.PDFDocument.load(pdfBytes);
+  const page=doc.getPages()[0];
+  const {width:W,height:H}=page.getSize();
+  for(const crew of crewData){
+    if(!sigs[crew.no])continue;
+    const png=await doc.embedPng(b64ToU8(sigs[crew.no].split(',')[1]));
+    const pad=1;
+    const cellW=crew.pdfW - pad*2;
+    const cellH=crew.pdfH - pad*2;
+    const pngDims=png.scale(1);
+    const scaleX=cellW/pngDims.width;
+    const scaleY=cellH/pngDims.height;
+    const sc=Math.min(scaleX, scaleY);
+    const drawW=pngDims.width*sc;
+    const drawH=pngDims.height*sc;
+    const offX=(cellW-drawW)/2;
+    const offY=Math.max(0, (cellH-drawH)/2 - cellH*0.15);
+    page.drawImage(png,{
+      x:     crew.pdfX + pad + offX,
+      y:     H - crew.pdfY - crew.pdfH + pad + offY,
+      width: drawW,
+      height:drawH
+    });
+  }
+  return doc;
+}
+
+/* ── ダウンロードモーダル ── */
+function downloadPDF(){
+  if(receiptData){
+    // 領収書あり → 選択モーダルを表示
+    const overlay = document.getElementById('dlChoiceOverlay');
+    overlay.classList.add('open');
+  } else {
+    // 領収書なし → Voucherのみ直接DL
+    _doDownloadVoucherOnly();
+  }
+}
+function dlChoiceCancel(){
+  document.getElementById('dlChoiceOverlay').classList.remove('open');
+}
+function dlChoiceSelect(mode){
+  document.getElementById('dlChoiceOverlay').classList.remove('open');
+  if(mode==='voucher') _doDownloadVoucherOnly();
+  else if(mode==='embed') _doDownloadEmbed();
+  else if(mode==='merge') _doDownloadMerge();
+}
+
+/* ── ダウンロード共通完了処理 ── */
+function _dlFinish(out, dlName){
+  const blob=new Blob([out],{type:'application/pdf'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=dlName; a.click();
+  URL.revokeObjectURL(url);
+  _lastSignedPdfBytes = new Uint8Array(out);
+  _lastSignedFilename = dlName;
+  const archBtn = document.getElementById('saveToArchiveBtn');
+  if(archBtn){ archBtn.disabled=false; archBtn.textContent='📂 署名済み一覧に保存'; archBtn.style.cssText=''; }
+  const txt=document.getElementById('dlBtnText');
+  const btn=document.getElementById('dlBtn');
+  txt.textContent='ダウンロード完了 ✓';
+  setTimeout(()=>{ txt.textContent='サイン済みPDFをダウンロード'; btn.disabled=false; },3000);
+}
+function _getDlName(){
+  const rawName=(document.getElementById('filenameInput').value||'signed_voucher').trim();
+  return rawName.replace(/\.pdf$/i,'')+'.pdf';
+}
+
+/* ── ① Voucherのみ ── */
+async function _doDownloadVoucherOnly(){
   const btn=document.getElementById('dlBtn'),txt=document.getElementById('dlBtnText');
   btn.disabled=true; txt.textContent='生成中...';
   try{
-    const doc=await PDFLib.PDFDocument.load(pdfBytes);
-    const page=doc.getPages()[0];
-    const {width:W,height:H}=page.getSize();
-    for(const crew of crewData){
-      if(!sigs[crew.no])continue;
-      const png=await doc.embedPng(b64ToU8(sigs[crew.no].split(',')[1]));
-      const pad=1;
-      const cellW=crew.pdfW - pad*2;
-      const cellH=crew.pdfH - pad*2;
+    const doc = await _buildSignedDoc();
+    const out = await doc.save();
+    _dlFinish(out, _getDlName());
+  }catch(err){
+    console.error(err);
+    txt.textContent='エラーが発生しました'; btn.disabled=false;
+  }
+}
 
-      // サイン画像のアスペクト比を保ちつつセル中央に配置
-      const pngDims=png.scale(1);
-      const scaleX=cellW/pngDims.width;
-      const scaleY=cellH/pngDims.height;
-      const sc=Math.min(scaleX, scaleY);
-      const drawW=pngDims.width*sc;
-      const drawH=pngDims.height*sc;
-      // セル内で中央揃え
-      const offX=(cellW-drawW)/2;
-      const offY=Math.max(0, (cellH-drawH)/2 - cellH*0.15); // 少し上にずらす
-
-      page.drawImage(png,{
-        x:     crew.pdfX + pad + offX,
-        y:     H - crew.pdfY - crew.pdfH + pad + offY,
-        width: drawW,
-        height:drawH
-      });
-    }
-    // ── 領収書を空白スペースに埋め込む ──
+/* ── ② 領収書を埋め込み（既存ロジック） ── */
+async function _doDownloadEmbed(){
+  const btn=document.getElementById('dlBtn'),txt=document.getElementById('dlBtnText');
+  btn.disabled=true; txt.textContent='生成中...';
+  try{
+    const doc = await _buildSignedDoc();
+    const page = doc.getPages()[0];
     if(receiptData){
       try{
-        // テキスト抽出で空白スペースを検出
         const pdfjsDoc2=await pdfjsLib.getDocument({data:pdfBytes.slice(), stopAtErrors:false}).promise;
         const pg2=await pdfjsDoc2.getPage(1);
         const content2=await pg2.getTextContent();
         const H2=page.getSize().height;
         const W2=page.getSize().width;
-
-        // 最終クルー行のbottomY（PDF座標系・左下原点）
-        // 数字（行番号）を探す
-        let lastNumY = H2 * 0.7; // デフォルト: ページ上から30%
-        let importantY = H2 * 0.2; // デフォルト: ページ上から80%
-
-        // pdf.jsアイテムから検出
+        let lastNumY = H2 * 0.7;
+        let importantY = H2 * 0.2;
         for(const it of content2.items){
           if(!it.str.trim()) continue;
-          const ty = it.transform[5]; // 左下原点Y
+          const ty = it.transform[5];
           const str = it.str.trim();
-          // 行番号（1〜99）
           if(/^\d{1,2}$/.test(str) && ty < H2*0.8 && ty > H2*0.1){
             lastNumY = Math.min(lastNumY, ty);
           }
-          // Important Notice
           if(/important/i.test(str) && ty < H2*0.6){
             importantY = Math.max(importantY, ty + (it.height||10));
           }
         }
-
-        // 空白スペース（左下原点）
         const margin = 15;
-        const spaceBottom = lastNumY - margin;   // 上から見て「下」= 左下原点で小さいY
-        const spaceTop    = importantY + margin; // 上から見て「上」= 左下原点で大きいY
+        const spaceBottom = lastNumY - margin;
+        const spaceTop    = importantY + margin;
         const spaceLeft   = W2 * 0.07;
         const spaceRight  = W2 * 0.93;
         const spaceW = spaceRight - spaceLeft;
         const spaceH = spaceTop - spaceBottom;
-
         if(spaceH > 20 && spaceW > 20){
-          // 画像を埋め込む
           const imgB64 = receiptData.dataURL.split(',')[1];
           const imgMime = receiptData.dataURL.split(';')[0].split(':')[1];
           let embeddedImg;
@@ -1656,13 +1719,11 @@ async function downloadPDF(){
             embeddedImg = await doc.embedJpg(b64ToU8(imgB64));
           }
           const dims = embeddedImg.scale(1);
-          // アスペクト比を保ちつつ空白に収める
           const scaleX = spaceW / dims.width;
           const scaleY = spaceH / dims.height;
-          const sc = Math.min(scaleX, scaleY, 1.0); // 拡大はしない
+          const sc = Math.min(scaleX, scaleY, 1.0);
           const drawW2 = dims.width * sc;
           const drawH2 = dims.height * sc;
-          // 水平中央・垂直中央
           const ox = (spaceW - drawW2) / 2;
           const oy = (spaceH - drawH2) / 2;
           page.drawImage(embeddedImg, {
@@ -1674,22 +1735,68 @@ async function downloadPDF(){
         }
       } catch(rErr){ console.warn('領収書埋め込みエラー:', rErr); }
     }
+    const out = await doc.save();
+    _dlFinish(out, _getDlName());
+  }catch(err){
+    console.error(err);
+    txt.textContent='エラーが発生しました'; btn.disabled=false;
+  }
+}
 
-    const out=await doc.save();
-    const blob=new Blob([out],{type:'application/pdf'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const rawName=(document.getElementById('filenameInput').value||'signed_voucher').trim();
-    const dlName=rawName.replace(/\.pdf$/i,'')+'.pdf';
-    a.href=url; a.download=dlName; a.click();
-    URL.revokeObjectURL(url);
-    // アーカイブ保存用に保持
-    _lastSignedPdfBytes = new Uint8Array(out);
-    _lastSignedFilename = dlName;
-    const archBtn = document.getElementById('saveToArchiveBtn');
-    if(archBtn){ archBtn.disabled=false; archBtn.textContent='📂 署名済み一覧に保存'; archBtn.style.cssText=''; }
-    txt.textContent='ダウンロード完了 ✓';
-    setTimeout(()=>{ txt.textContent='サイン済みPDFをダウンロード'; btn.disabled=false; },3000);
+/* ── ③ ページ結合（Voucher + 領収書を複数ページの1PDFに） ── */
+async function _doDownloadMerge(){
+  const btn=document.getElementById('dlBtn'),txt=document.getElementById('dlBtnText');
+  btn.disabled=true; txt.textContent='結合中...';
+  try{
+    // Step1: 署名済みVoucherを作成
+    const voucherDoc = await _buildSignedDoc();
+    const mergedDoc = await PDFLib.PDFDocument.create();
+
+    // Step2: VoucherページをmergedDocにコピー
+    const [voucherPage] = await mergedDoc.copyPages(voucherDoc, [0]);
+    mergedDoc.addPage(voucherPage);
+
+    // Step3: 領収書をページとして追加
+    if(receiptData){
+      const mime = receiptData.dataURL.split(';')[0].split(':')[1];
+      if(mime === 'application/pdf'){
+        // PDF領収書 → 全ページをコピー
+        const receiptPdfBytes = b64ToU8(receiptData.dataURL.split(',')[1]);
+        const receiptDoc = await PDFLib.PDFDocument.load(receiptPdfBytes);
+        const pageCount = receiptDoc.getPageCount();
+        const indices = Array.from({length: pageCount}, (_, i) => i);
+        const copiedPages = await mergedDoc.copyPages(receiptDoc, indices);
+        copiedPages.forEach(p => mergedDoc.addPage(p));
+      } else {
+        // 画像領収書 → A4ページを作成して中央に配置
+        const imgB64 = receiptData.dataURL.split(',')[1];
+        const imgBytes = b64ToU8(imgB64);
+        let embImg;
+        if(mime === 'image/png'){
+          embImg = await mergedDoc.embedPng(imgBytes);
+        } else {
+          embImg = await mergedDoc.embedJpg(imgBytes);
+        }
+        // A4サイズ（595 x 842 pt）
+        const A4W = 595, A4H = 842;
+        const receiptPage = mergedDoc.addPage([A4W, A4H]);
+        const dims = embImg.scale(1);
+        const margin = 40;
+        const maxW = A4W - margin * 2;
+        const maxH = A4H - margin * 2;
+        const scaleX = maxW / dims.width;
+        const scaleY = maxH / dims.height;
+        const sc = Math.min(scaleX, scaleY, 1.0);
+        const drawW = dims.width * sc;
+        const drawH = dims.height * sc;
+        const x = (A4W - drawW) / 2;
+        const y = (A4H - drawH) / 2;
+        receiptPage.drawImage(embImg, { x, y, width: drawW, height: drawH });
+      }
+    }
+
+    const out = await mergedDoc.save();
+    _dlFinish(out, _getDlName());
   }catch(err){
     console.error(err);
     txt.textContent='エラーが発生しました'; btn.disabled=false;
@@ -2362,6 +2469,27 @@ showScreen('upload');
         追加する
       </button>
     </div>
+  </div>
+</div>
+
+<!-- ── ダウンロード選択モーダル ── -->
+<div id="dlChoiceOverlay">
+  <div class="dlc-box">
+    <div class="dlc-title">📥 ダウンロード形式を選択</div>
+    <div class="dlc-sub" id="dlChoiceSub">領収書が添付されています</div>
+    <button class="dlc-btn btn-voucher-only" onclick="dlChoiceSelect('voucher')">
+      <div class="dlc-btn-title">📄 Voucherのみ</div>
+      <div class="dlc-btn-desc">署名済みVoucherだけをダウンロード</div>
+    </button>
+    <button class="dlc-btn btn-embed" onclick="dlChoiceSelect('embed')">
+      <div class="dlc-btn-title">🧾 領収書を埋め込み</div>
+      <div class="dlc-btn-desc">VoucherのPDF内に領収書を配置（1ページ）</div>
+    </button>
+    <button class="dlc-btn btn-merge" onclick="dlChoiceSelect('merge')">
+      <div class="dlc-btn-title">📑 ページ結合</div>
+      <div class="dlc-btn-desc">Voucher＋領収書を複数ページの1PDFにまとめる</div>
+    </button>
+    <button class="dlc-cancel" onclick="dlChoiceCancel()">キャンセル</button>
   </div>
 </div>
 </body>
