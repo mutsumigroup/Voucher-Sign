@@ -1405,24 +1405,34 @@ async function _doRaMerge(){
     const [voucherPage] = await mergedDoc.copyPages(voucherDoc, [0]);
     mergedDoc.addPage(voucherPage);
 
+    const A4W = 595, A4H = 842;
+    const margin = 30;
     if(raReceiptBytes){
+      // PDF領収書：各ページをA4に拡大して配置
       const receiptDoc = await PDFLib.PDFDocument.load(raReceiptBytes);
       const pageCount = receiptDoc.getPageCount();
-      const indices = Array.from({length: pageCount}, (_, i) => i);
-      const copiedPages = await mergedDoc.copyPages(receiptDoc, indices);
-      copiedPages.forEach(p => mergedDoc.addPage(p));
+      for(let i=0;i<pageCount;i++){
+        const embPages = await mergedDoc.embedPages([receiptDoc.getPages()[i]]);
+        const embPage = embPages[0];
+        const srcSize = embPage.size();
+        const sc = Math.min((A4W-margin*2)/srcSize.width, (A4H-margin*2)/srcSize.height);
+        const drawW = srcSize.width*sc, drawH = srcSize.height*sc;
+        const newPage = mergedDoc.addPage([A4W, A4H]);
+        newPage.drawPage(embPage, {
+          x:(A4W-drawW)/2, y:(A4H-drawH)/2, width:drawW, height:drawH
+        });
+      }
     } else if(raReceiptDataURL){
+      // 画像領収書：A4ページに拡大して配置
       const imgB64 = raReceiptDataURL.split(',')[1];
       const mime = raReceiptDataURL.split(';')[0].split(':')[1];
       const imgBytes = b64ToU8(imgB64);
       let embImg;
       if(mime === 'image/png') embImg = await mergedDoc.embedPng(imgBytes);
       else embImg = await mergedDoc.embedJpg(imgBytes);
-      const A4W = 595, A4H = 842;
       const receiptPage = mergedDoc.addPage([A4W, A4H]);
       const dims = embImg.scale(1);
-      const margin = 40;
-      const sc = Math.min((A4W-margin*2)/dims.width, (A4H-margin*2)/dims.height, 1.0);
+      const sc = Math.min((A4W-margin*2)/dims.width, (A4H-margin*2)/dims.height);
       const drawW = dims.width*sc, drawH = dims.height*sc;
       receiptPage.drawImage(embImg, {
         x:(A4W-drawW)/2, y:(A4H-drawH)/2, width:drawW, height:drawH
