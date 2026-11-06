@@ -1152,9 +1152,103 @@ function updateRaBtn(){
   }
 }
 
-async function attachReceiptToPDF(){
-  const hasReceipt = raReceiptDataURL || raReceiptBytes;
-  if(!raVoucherBytes || !hasReceipt) return;
+/* ── RAモード：ファイル名生成共通 ── */
+async function _buildRaFilename(raVoucherBytesLocal){
+  const doc2=await pdfjsLib.getDocument({data:raVoucherBytesLocal.slice(), stopAtErrors:false}).promise;
+  const pg2=await doc2.getPage(1);
+  const content2=await pg2.getTextContent();
+  const pg2size = (await doc2.getPage(1)).getViewport({scale:1});
+  const H2 = pg2size.height;
+  const rawItems2=[];
+  for(const it of content2.items){
+    if(!it.str||!it.str.trim()) continue;
+    const tx=it.transform[4], ty=it.transform[5];
+    const h2=Math.abs(it.height)||8;
+    rawItems2.push({x:tx,x1:tx+Math.abs(it.width),yCtr:ty+h2/2,str:it.str,yPDF:ty});
+  }
+  const raItems = rawItems2.map(i=>({x:i.x, y: H2 - i.yPDF, str:i.str}));
+  const raLineMap = new Map();
+  for(const it of raItems){
+    const yKey = Math.round(it.y / 5) * 5;
+    if(!raLineMap.has(yKey)) raLineMap.set(yKey, []);
+    raLineMap.get(yKey).push(it);
+  }
+  const raLines = [...raLineMap.values()].map(row => row.sort((a,b)=>a.x-b.x));
+  const raGetVal = (pat, firstWordOnly=false) => {
+    for(const line of raLines){
+      const idx = line.findIndex(it => pat.test(it.str));
+      if(idx >= 0 && idx < line.length - 1){
+        const rest = line.slice(idx + 1);
+        if(firstWordOnly){
+          for(const it of rest){
+            const w = it.str.trim().replace(/[:\s]+$/,'');
+            if(/^[A-Za-z]+$/.test(w)) return w;
+          }
+          return rest[0].str.trim();
+        }
+        return rest.map(it=>it.str.trim()).join(' ').replace(/^[:\s]+/,'').trim();
+      }
+    }
+    return '';
+  };
+  let raShipName = raGetVal(/vessel:/i);
+  if(!raShipName){
+    for(const it of raItems){
+      const m = it.str.match(/(?:m\/v|mv|s\.s\.|ss|f\/v|fv)[:\s]+(.+)/i);
+      if(m && m[1].trim().length > 1){ raShipName = m[1].trim(); break; }
+    }
+  }
+  let raCategory = raGetVal(/category/i, true);
+  if(!raCategory){
+    for(const it of raItems){
+      const m = it.str.match(/category[:\s]+([A-Za-z]+)/i);
+      if(m && m[1].trim()){ raCategory = m[1].trim(); break; }
+    }
+  }
+  let raMealTotal = '';
+  for(const line of raLines){
+    const lineStr = line.map(it=>it.str).join(' ');
+    if(/total/i.test(lineStr) && /jpy/i.test(lineStr)){
+      const jpyIdx = line.findIndex(it => /^jpy$/i.test(it.str.trim()));
+      if(jpyIdx >= 0 && jpyIdx < line.length - 1){
+        const numStr = line[jpyIdx + 1].str.replace(/[^0-9,]/g,'');
+        if(numStr){ raMealTotal = 'JPY' + numStr.replace(/,/g,''); break; }
+      }
+      for(const it of line){
+        const m = it.str.match(/jpy\s*([\d,]+)/i);
+        if(m){ raMealTotal = 'JPY' + m[1].replace(/,/g,''); break; }
+      }
+      if(raMealTotal) break;
+    }
+  }
+  const safe = s => s.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_');
+  const raParts = [
+    raShipName  ? safe(raShipName)  : '',
+    raCategory  ? safe(raCategory)  : '',
+    raMealTotal ? safe(raMealTotal) : ''
+  ].filter(Boolean);
+  return raParts.length > 0 ? raParts.join('_') + '.pdf' : 'voucher_with_receipt.pdf';
+}
+
+function _raFinish(out, raFilename){
+  const blob=new Blob([out],{type:'application/pdf'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=raFilename; a.click();
+  URL.revokeObjectURL(url);
+  _lastReceiptPdfBytes = new Uint8Array(out);
+  _lastReceiptFilename = raFilename;
+  const raArchBtn = document.getElementById('raArchiveBtn');
+  if(raArchBtn){ raArchBtn.disabled=false; raArchBtn.textContent='📂 署名済み一覧に保存'; raArchBtn.style.cssText=''; }
+  const txt=document.getElementById('raDlBtnText');
+  const btn=document.getElementById('raDlBtn');
+  txt.textContent='ダウンロード完了 ✓';
+  btn.className='ra-dl-btn ready';
+  setTimeout(()=>{ txt.textContent='領収書を添付してダウンロード'; },3000);
+}
+
+/* ── RAモード：埋め込み（既存ロジック） ── */
+async function _doRaEmbed(){
   const btn=document.getElementById('raDlBtn');
   const txt=document.getElementById('raDlBtnText');
   btn.className='ra-dl-btn'; txt.textContent='処理中...';
@@ -1289,35 +1383,62 @@ async function attachReceiptToPDF(){
       }
     }
 
-    const safe = s => s.replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_');
-    const raParts = [
-      raShipName  ? safe(raShipName)  : '',
-      raCategory  ? safe(raCategory)  : '',
-      raMealTotal ? safe(raMealTotal) : ''
-    ].filter(Boolean);
-    const raFilename = raParts.length > 0 ? raParts.join('_') + '.pdf' : 'voucher_with_receipt.pdf';
-
     const out=await doc.save();
-    const blob=new Blob([out],{type:'application/pdf'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=raFilename; a.click();
-    URL.revokeObjectURL(url);
-
-    // アーカイブ保存用に保持
-    _lastReceiptPdfBytes = new Uint8Array(out);
-    _lastReceiptFilename = raFilename;
-    const raArchBtn = document.getElementById('raArchiveBtn');
-    if(raArchBtn){ raArchBtn.disabled=false; raArchBtn.textContent='📂 署名済み一覧に保存'; raArchBtn.style.cssText=''; }
-
-    txt.textContent='ダウンロード完了 ✓';
-    btn.className='ra-dl-btn ready';
-    setTimeout(()=>{ txt.textContent='領収書を添付してダウンロード'; },3000);
+    const raFilename = await _buildRaFilename(raVoucherBytes);
+    _raFinish(out, raFilename);
 
   }catch(err){
     console.error(err);
     txt.textContent='エラーが発生しました';
     btn.className='ra-dl-btn ready';
+  }
+}
+
+/* ── RAモード：ページ結合 ── */
+async function _doRaMerge(){
+  const btn=document.getElementById('raDlBtn');
+  const txt=document.getElementById('raDlBtnText');
+  btn.className='ra-dl-btn'; txt.textContent='結合中...';
+  try{
+    const voucherDoc = await PDFLib.PDFDocument.load(raVoucherBytes, {throwOnInvalidObject:false, updateMetadata:false});
+    const mergedDoc = await PDFLib.PDFDocument.create();
+    const [voucherPage] = await mergedDoc.copyPages(voucherDoc, [0]);
+    mergedDoc.addPage(voucherPage);
+
+    if(raReceiptBytes){
+      const receiptDoc = await PDFLib.PDFDocument.load(raReceiptBytes);
+      const pageCount = receiptDoc.getPageCount();
+      const indices = Array.from({length: pageCount}, (_, i) => i);
+      const copiedPages = await mergedDoc.copyPages(receiptDoc, indices);
+      copiedPages.forEach(p => mergedDoc.addPage(p));
+    } else if(raReceiptDataURL){
+      const imgB64 = raReceiptDataURL.split(',')[1];
+      const mime = raReceiptDataURL.split(';')[0].split(':')[1];
+      const imgBytes = b64ToU8(imgB64);
+      let embImg;
+      if(mime === 'image/png') embImg = await mergedDoc.embedPng(imgBytes);
+      else embImg = await mergedDoc.embedJpg(imgBytes);
+      const A4W = 595, A4H = 842;
+      const receiptPage = mergedDoc.addPage([A4W, A4H]);
+      const dims = embImg.scale(1);
+      const margin = 40;
+      const sc = Math.min((A4W-margin*2)/dims.width, (A4H-margin*2)/dims.height, 1.0);
+      const drawW = dims.width*sc, drawH = dims.height*sc;
+      receiptPage.drawImage(embImg, {
+        x:(A4W-drawW)/2, y:(A4H-drawH)/2, width:drawW, height:drawH
+      });
+    }
+
+    const out = await mergedDoc.save();
+    const raFilename = await _buildRaFilename(raVoucherBytes);
+    _raFinish(out, raFilename);
+
+  }catch(err){
+    console.error(err);
+    const txt2=document.getElementById('raDlBtnText');
+    const btn2=document.getElementById('raDlBtn');
+    txt2.textContent='エラーが発生しました';
+    btn2.className='ra-dl-btn ready';
   }
 }
 
@@ -1620,24 +1741,43 @@ async function _buildSignedDoc(){
 }
 
 /* ── ダウンロードモーダル ── */
+let _dlChoiceMode = 'sign'; // 'sign' | 'ra'
+
 function downloadPDF(){
   if(receiptData){
-    // 領収書あり → 選択モーダルを表示
+    _dlChoiceMode = 'sign';
+    // Voucherのみボタンを表示
+    document.querySelector('.dlc-btn.btn-voucher-only').style.display='';
     const overlay = document.getElementById('dlChoiceOverlay');
     overlay.classList.add('open');
   } else {
-    // 領収書なし → Voucherのみ直接DL
     _doDownloadVoucherOnly();
   }
 }
+
+function attachReceiptToPDF(){
+  const hasReceipt = raReceiptDataURL || raReceiptBytes;
+  if(!raVoucherBytes || !hasReceipt) return;
+  _dlChoiceMode = 'ra';
+  // RAモードではVoucherのみボタンを非表示
+  document.querySelector('.dlc-btn.btn-voucher-only').style.display='none';
+  const overlay = document.getElementById('dlChoiceOverlay');
+  overlay.classList.add('open');
+}
+
 function dlChoiceCancel(){
   document.getElementById('dlChoiceOverlay').classList.remove('open');
 }
 function dlChoiceSelect(mode){
   document.getElementById('dlChoiceOverlay').classList.remove('open');
-  if(mode==='voucher') _doDownloadVoucherOnly();
-  else if(mode==='embed') _doDownloadEmbed();
-  else if(mode==='merge') _doDownloadMerge();
+  if(_dlChoiceMode === 'ra'){
+    if(mode==='embed') _doRaEmbed();
+    else if(mode==='merge') _doRaMerge();
+  } else {
+    if(mode==='voucher') _doDownloadVoucherOnly();
+    else if(mode==='embed') _doDownloadEmbed();
+    else if(mode==='merge') _doDownloadMerge();
+  }
 }
 
 /* ── ダウンロード共通完了処理 ── */
