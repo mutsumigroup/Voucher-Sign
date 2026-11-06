@@ -1906,42 +1906,40 @@ async function _doDownloadMerge(){
     const [voucherPage] = await mergedDoc.copyPages(voucherDoc, [0]);
     mergedDoc.addPage(voucherPage);
 
-    // Step3: 領収書をページとして追加
+    // Step3: 領収書をページとして追加（A4に拡大して配置）
+    const A4W2 = 595, A4H2 = 842, margin2 = 30;
     if(receiptData){
       const mime = receiptData.dataURL.split(';')[0].split(':')[1];
       if(mime === 'application/pdf'){
-        // PDF領収書 → 全ページをコピー
+        // PDF領収書 → 各ページをA4に拡大して配置
         const receiptPdfBytes = b64ToU8(receiptData.dataURL.split(',')[1]);
         const receiptDoc = await PDFLib.PDFDocument.load(receiptPdfBytes);
         const pageCount = receiptDoc.getPageCount();
-        const indices = Array.from({length: pageCount}, (_, i) => i);
-        const copiedPages = await mergedDoc.copyPages(receiptDoc, indices);
-        copiedPages.forEach(p => mergedDoc.addPage(p));
+        for(let i=0;i<pageCount;i++){
+          const embPages = await mergedDoc.embedPages([receiptDoc.getPages()[i]]);
+          const embPage = embPages[0];
+          const srcSize = embPage.size();
+          const sc = Math.min((A4W2-margin2*2)/srcSize.width, (A4H2-margin2*2)/srcSize.height);
+          const drawW = srcSize.width*sc, drawH = srcSize.height*sc;
+          const newPage = mergedDoc.addPage([A4W2, A4H2]);
+          newPage.drawPage(embPage, {
+            x:(A4W2-drawW)/2, y:(A4H2-drawH)/2, width:drawW, height:drawH
+          });
+        }
       } else {
-        // 画像領収書 → A4ページを作成して中央に配置
+        // 画像領収書 → A4ページを作成して拡大配置
         const imgB64 = receiptData.dataURL.split(',')[1];
         const imgBytes = b64ToU8(imgB64);
         let embImg;
-        if(mime === 'image/png'){
-          embImg = await mergedDoc.embedPng(imgBytes);
-        } else {
-          embImg = await mergedDoc.embedJpg(imgBytes);
-        }
-        // A4サイズ（595 x 842 pt）
-        const A4W = 595, A4H = 842;
-        const receiptPage = mergedDoc.addPage([A4W, A4H]);
+        if(mime === 'image/png') embImg = await mergedDoc.embedPng(imgBytes);
+        else embImg = await mergedDoc.embedJpg(imgBytes);
+        const receiptPage = mergedDoc.addPage([A4W2, A4H2]);
         const dims = embImg.scale(1);
-        const margin = 40;
-        const maxW = A4W - margin * 2;
-        const maxH = A4H - margin * 2;
-        const scaleX = maxW / dims.width;
-        const scaleY = maxH / dims.height;
-        const sc = Math.min(scaleX, scaleY, 1.0);
-        const drawW = dims.width * sc;
-        const drawH = dims.height * sc;
-        const x = (A4W - drawW) / 2;
-        const y = (A4H - drawH) / 2;
-        receiptPage.drawImage(embImg, { x, y, width: drawW, height: drawH });
+        const sc = Math.min((A4W2-margin2*2)/dims.width, (A4H2-margin2*2)/dims.height);
+        const drawW = dims.width*sc, drawH = dims.height*sc;
+        receiptPage.drawImage(embImg, {
+          x:(A4W2-drawW)/2, y:(A4H2-drawH)/2, width:drawW, height:drawH
+        });
       }
     }
 
