@@ -273,8 +273,17 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-item-del:active{background:#fca5a5;}
 .archive-bulk-bar{background:#7c3aed;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .archive-bulk-count{font-size:14px;font-weight:800;color:#fff;}
-.archive-bulk-dl{background:#fff;color:#7c3aed;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;}
+.archive-bulk-dl{background:#fff;color:#7c3aed;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;}
 .archive-bulk-dl:active{opacity:.8;}
+.archive-bulk-merge{background:#fbbf24;color:#7c3aed;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;}
+.archive-bulk-merge:active{opacity:.8;}
+/* 船名サマリー */
+.archive-ship-summary{margin-bottom:12px;}
+.archive-ship-summary-title{font-size:11px;font-weight:700;color:#64748b;letter-spacing:.5px;margin-bottom:6px;}
+.archive-ship-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.archive-ship-chip{display:inline-flex;align-items:center;gap:5px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;color:#1d4ed8;cursor:pointer;transition:background .15s;}
+.archive-ship-chip:active{background:#dbeafe;}
+.archive-ship-chip .chip-count{background:#2563eb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;}
 .archive-empty{text-align:center;padding:40px 20px;color:#94a3b8;}
 .archive-empty-icon{font-size:40px;margin-bottom:12px;}
 .archive-empty-text{font-size:14px;font-weight:700;}
@@ -646,8 +655,16 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <div id="archiveBulkBar" style="display:none;">
       <div class="archive-bulk-bar">
         <span class="archive-bulk-count" id="archiveBulkCount">0件選択中</span>
-        <button class="archive-bulk-dl" onclick="downloadSelectedArchive()">⬇ まとめてダウンロード</button>
+        <div style="display:flex;gap:8px;">
+          <button class="archive-bulk-dl" onclick="downloadSelectedArchive()">⬇ 個別DL</button>
+          <button class="archive-bulk-merge" onclick="mergeAndDownloadSelected()">📑 1つに結合</button>
+        </div>
       </div>
+    </div>
+    <!-- 船名サマリー -->
+    <div class="archive-ship-summary" id="archiveShipSummary" style="display:none;">
+      <div class="archive-ship-summary-title">🚢 船名別件数（タップで絞り込み）</div>
+      <div class="archive-ship-chips" id="archiveShipChips"></div>
     </div>
     <!-- 全選択/削除バー -->
     <div class="archive-select-all-row" id="archiveSelectAllRow" style="display:none;">
@@ -2245,13 +2262,26 @@ function backToModeSelect(){
   updateArchiveBulkBar();
 }
 
+let _archiveShipFilter = null; // nullなら全件表示
+
+function extractShipName(filename){
+  // ファイル名から船名を抽出：「SHIP_NAME_Category_JPY...」形式
+  // Category候補: Embark, Disembark, Embarkation, Disembarkation など
+  const m = filename.replace(/\.pdf$/i,'').match(/^(.+?)_(Embark|Disembark|Sign|Receipt|JPY|\d)/i);
+  if(m) return m[1].replace(/_/g,' ').trim();
+  // アンダースコア区切りの先頭2〜3単語
+  const parts = filename.replace(/\.pdf$/i,'').split('_');
+  if(parts.length >= 2) return parts.slice(0, Math.min(3, parts.length-1)).join(' ');
+  return filename.replace(/\.pdf$/i,'');
+}
+
 async function renderArchive(){
   const list = document.getElementById('archiveList');
   list.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">読み込み中...</div>';
 
-  const records = await getAllArchive();
+  const allRecords = await getAllArchive();
 
-  if(records.length === 0){
+  if(allRecords.length === 0){
     list.innerHTML = `
       <div class="archive-empty">
         <div class="archive-empty-icon">📭</div>
@@ -2259,8 +2289,33 @@ async function renderArchive(){
         <div class="archive-empty-sub">サイン収集または領収書添付後に<br>「署名済み一覧に保存」ボタンで保存できます</div>
       </div>`;
     document.getElementById('archiveSelectAllRow').style.display = 'none';
+    document.getElementById('archiveShipSummary').style.display = 'none';
     return;
   }
+
+  // 船名サマリーを構築
+  const shipCount = new Map();
+  for(const r of allRecords){
+    const ship = extractShipName(r.filename);
+    shipCount.set(ship, (shipCount.get(ship)||0) + 1);
+  }
+  const shipSummary = document.getElementById('archiveShipSummary');
+  const shipChips = document.getElementById('archiveShipChips');
+  shipSummary.style.display = 'block';
+  const sortedShips = [...shipCount.entries()].sort((a,b) => b[1]-a[1]);
+  shipChips.innerHTML = `
+    <span class="archive-ship-chip${_archiveShipFilter===null?' active':''}" onclick="filterByShip(null)" style="${_archiveShipFilter===null?'background:#dbeafe;border-color:#2563eb;':''}">
+      全て <span class="chip-count">${allRecords.length}</span>
+    </span>
+    ${sortedShips.map(([ship,cnt])=>`
+      <span class="archive-ship-chip${_archiveShipFilter===ship?' active':''}" onclick="filterByShip('${escHtml(ship)}')" style="${_archiveShipFilter===ship?'background:#dbeafe;border-color:#2563eb;':''}">
+        🚢 ${escHtml(ship)} <span class="chip-count">${cnt}</span>
+      </span>`).join('')}`;
+
+  // フィルター適用
+  const records = _archiveShipFilter
+    ? allRecords.filter(r => extractShipName(r.filename) === _archiveShipFilter)
+    : allRecords;
 
   // 月別グループ化
   const byMonth = new Map();
@@ -2279,7 +2334,6 @@ async function renderArchive(){
   list.innerHTML = '';
   let openFirst = true;
   for(const [month, items] of sortedMonths){
-    // 月内は新しい順
     const sorted = [...items].sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
     const monthId = 'month_' + month.replace(/[年月]/g,'_');
 
@@ -2303,6 +2357,12 @@ async function renderArchive(){
 
   document.getElementById('archiveSelectAllRow').style.display = 'flex';
   updateArchiveBulkBar();
+}
+
+async function filterByShip(ship){
+  _archiveShipFilter = ship;
+  archiveSelectedIds = new Set();
+  await renderArchive();
 }
 
 function renderArchiveItem(r){
@@ -2466,9 +2526,49 @@ async function downloadSelectedArchive(){
   for(const id of ids){
     try{
       await downloadArchiveItem(id);
-      // 複数ファイル: 少し間隔を空ける
       if(ids.length > 1) await new Promise(r => setTimeout(r, 300));
     }catch(e){ console.warn('DL error for id', id, e); }
+  }
+}
+
+async function mergeAndDownloadSelected(){
+  if(archiveSelectedIds.size === 0) return;
+  const btn = document.querySelector('.archive-bulk-merge');
+  if(btn){ btn.textContent = '結合中...'; btn.disabled = true; }
+  try{
+    const ids = [...archiveSelectedIds];
+    const mergedDoc = await PDFLib.PDFDocument.create();
+    for(const id of ids){
+      const r = await getArchiveById(id);
+      if(!r) continue;
+      const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
+      if(!bytes.length) continue;
+      try{
+        const srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true});
+        const pageCount = srcDoc.getPageCount();
+        for(let i=0;i<pageCount;i++){
+          const [copied] = await mergedDoc.copyPages(srcDoc, [i]);
+          mergedDoc.addPage(copied);
+        }
+      }catch(e){ console.warn('結合スキップ:', r.filename, e); }
+    }
+    if(mergedDoc.getPageCount() === 0){
+      alert('結合できるページがありませんでした');
+      return;
+    }
+    const out = await mergedDoc.save();
+    const blob = new Blob([out], {type:'application/pdf'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    // ファイル名：選択件数＋最初のファイル名ベース
+    const firstName = (await getArchiveById(ids[0]))?.filename?.replace(/\.pdf$/i,'') || 'merged';
+    a.download = `${firstName}_他${ids.length}件_merged.pdf`;
+    a.href = url; a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('結合に失敗しました: ' + e.message);
+  }finally{
+    if(btn){ btn.textContent = '📑 1つに結合'; btn.disabled = false; }
   }
 }
 
