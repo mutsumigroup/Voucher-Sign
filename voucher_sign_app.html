@@ -1718,7 +1718,45 @@ function saveSig(){
 
   sigs[currentCrew.no]=tmp.toDataURL('image/png');
   closeOverlay(); renderList();
+
+  // 全員サイン完了したら自動でPDF生成してアーカイブに保存
+  const done = Object.keys(sigs).length;
+  const total = crewData.length;
+  if(done === total && total > 0){
+    _autoSaveToArchive();
+  }
 }
+
+async function _autoSaveToArchive(){
+  const archBtn = document.getElementById('saveToArchiveBtn');
+  if(archBtn){
+    archBtn.disabled = true;
+    archBtn.textContent = '📂 保存中...';
+  }
+  try{
+    const doc = await _buildSignedDoc();
+    const out = await doc.save();
+    const bytes = new Uint8Array(out);
+    const rawName = (document.getElementById('filenameInput').value || 'signed_voucher').trim();
+    const dlName = rawName.replace(/\.pdf$/i, '') + '.pdf';
+    _lastSignedPdfBytes = bytes;
+    _lastSignedFilename = dlName;
+    await saveToArchive(bytes, dlName, 'sign');
+    if(archBtn){
+      archBtn.textContent = '✓ 署名済み一覧に保存しました';
+      archBtn.style.background = '#dcfce7';
+      archBtn.style.borderColor = '#16a34a';
+      archBtn.style.color = '#15803d';
+    }
+  }catch(e){
+    console.error('自動保存エラー:', e);
+    // エラーでも手動保存ボタンは使えるようにする
+    if(archBtn){
+      archBtn.disabled = false;
+      archBtn.textContent = '📂 署名済み一覧に保存';
+      archBtn.style.cssText = '';
+    }
+  }
 
 /* ── DOWNLOAD ── */
 /* ── サイン画像をPDFに描き込む共通処理 ── */
