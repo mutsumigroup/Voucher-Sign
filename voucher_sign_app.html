@@ -1479,10 +1479,15 @@ function renderList(){
   document.getElementById('progFill').style.width=(total>0?done/total*100:0)+'%';
   const dlBtn=document.getElementById('dlBtn'),dlTxt=document.getElementById('dlBtnText');
   const fnEditor=document.getElementById('filenameEditor');
+  const archBtn = document.getElementById('saveToArchiveBtn');
   if(done===total&&total>0){
     dlBtn.disabled=false; dlBtn.className='dl-btn ready';
     dlTxt.textContent='サイン済みPDFをダウンロード';
     fnEditor.classList.add('visible');
+    // 全員完了時に「署名済み一覧に保存」ボタンも有効化
+    if(archBtn && archBtn.textContent.indexOf('✓') === -1){
+      archBtn.disabled=false;
+    }
   }else{
     dlBtn.disabled=true; dlBtn.className='dl-btn';
     dlTxt.textContent=`残り${total-done}名のサインが必要`;
@@ -1743,6 +1748,7 @@ async function _autoSaveToArchive(){
     _lastSignedFilename = dlName;
     await saveToArchive(bytes, dlName, 'sign');
     if(archBtn){
+      archBtn.disabled = false;
       archBtn.textContent = '✓ 署名済み一覧に保存しました';
       archBtn.style.background = '#dcfce7';
       archBtn.style.borderColor = '#16a34a';
@@ -2585,11 +2591,18 @@ let _lastSignedPdfBytes = null; // downloadPDF後に保持
 let _lastSignedFilename = null;
 
 async function saveCurrentToArchive(){
-  if(!_lastSignedPdfBytes) return;
   const btn = document.getElementById('saveToArchiveBtn');
   btn.disabled = true;
   btn.textContent = '保存中...';
   try{
+    // _lastSignedPdfBytes がない場合はPDFを生成する
+    if(!_lastSignedPdfBytes){
+      const doc = await _buildSignedDoc();
+      const out = await doc.save();
+      _lastSignedPdfBytes = new Uint8Array(out);
+      const rawName = (document.getElementById('filenameInput').value || 'signed_voucher').trim();
+      _lastSignedFilename = rawName.replace(/\.pdf$/i, '') + '.pdf';
+    }
     await saveToArchive(_lastSignedPdfBytes, _lastSignedFilename, 'sign');
     btn.textContent = '✓ 保存しました';
     btn.style.background = '#dcfce7';
