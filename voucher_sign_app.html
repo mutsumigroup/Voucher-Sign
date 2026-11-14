@@ -2583,6 +2583,7 @@ let _lastSignedPdfBytes = null; // downloadPDF後に保持
 let _lastSignedFilename = null;
 
 async function saveCurrentToArchive(){
+  console.log('saveCurrentToArchive called');
   const btn = document.getElementById('saveToArchiveBtn');
   // すでに保存済みならスキップ
   if(btn && btn.textContent.indexOf('✓') !== -1) return;
