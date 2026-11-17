@@ -2450,9 +2450,15 @@ function renderArchiveItem(r){
       </div>
       <div class="archive-item-actions">
         <button class="archive-item-confirm${confirmed?' confirmed':''}" onclick="toggleConfirmed('${r.id}', ${confirmed})" title="${confirmed?'確認済み':'未確認'}">✅</button>
+        <button class="archive-item-rename" onclick="startRenameArchive('${r.id}')" title="ファイル名を変更">✏️</button>
         <button class="archive-item-preview" onclick="previewArchiveItem('${r.id}')">👁</button>
         <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
       </div>
+    </div>
+    <div class="archive-rename-form" id="rename_form_${r.id}" style="display:none;">
+      <input class="archive-rename-input" id="rename_input_${r.id}" type="text" value="${escHtml(r.filename.replace(/\.pdf$/i,''))}" placeholder="新しいファイル名（.pdf不要）">
+      <button class="archive-rename-save" onclick="saveRenameArchive('${r.id}')">保存</button>
+      <button class="archive-rename-cancel" onclick="cancelRenameArchive('${r.id}')">キャンセル</button>
     </div>`;
 }
 
@@ -2463,6 +2469,52 @@ function toggleMonthItems(monthId){
   const isOpen = el.classList.contains('open');
   el.classList.toggle('open', !isOpen);
   if(arrow) arrow.classList.toggle('open', !isOpen);
+}
+
+function startRenameArchive(id){
+  // 他に開いているリネームフォームを閉じる
+  document.querySelectorAll('.archive-rename-form').forEach(el => {
+    if(el.id !== 'rename_form_'+id) el.style.display = 'none';
+  });
+  const form = document.getElementById('rename_form_'+id);
+  if(!form) return;
+  const isOpen = form.style.display !== 'none';
+  form.style.display = isOpen ? 'none' : 'flex';
+  if(!isOpen){
+    const input = document.getElementById('rename_input_'+id);
+    if(input){ input.focus(); input.select(); }
+  }
+}
+
+async function saveRenameArchive(id){
+  const input = document.getElementById('rename_input_'+id);
+  if(!input) return;
+  const rawName = input.value.trim();
+  if(!rawName){ alert('ファイル名を入力してください'); return; }
+  const newFilename = rawName.replace(/\.pdf$/i,'') + '.pdf';
+  const saveBtn = input.closest('.archive-rename-form').querySelector('.archive-rename-save');
+  if(saveBtn){ saveBtn.textContent = '保存中...'; saveBtn.disabled = true; }
+  try{
+    const db = await getFirestore();
+    await db.collection('voucher_archives').doc(id).update({ filename: newFilename });
+    // ローカルキャッシュも更新
+    if(window._archiveCache){
+      const rec = window._archiveCache.find(r => r.id === id);
+      if(rec) rec.filename = newFilename;
+    }
+    // UI更新（フォームを閉じて表示名を更新）
+    const nameEl = document.querySelector(`#aitem_${id} .archive-item-name`);
+    if(nameEl) nameEl.textContent = newFilename;
+    document.getElementById('rename_form_'+id).style.display = 'none';
+  }catch(e){
+    alert('ファイル名の変更に失敗しました: ' + e.message);
+    if(saveBtn){ saveBtn.textContent = '保存'; saveBtn.disabled = false; }
+  }
+}
+
+function cancelRenameArchive(id){
+  const form = document.getElementById('rename_form_'+id);
+  if(form) form.style.display = 'none';
 }
 
 function toggleArchiveSelect(id){
