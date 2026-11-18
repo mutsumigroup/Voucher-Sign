@@ -2496,7 +2496,7 @@ async function saveRenameArchive(id){
   if(saveBtn){ saveBtn.textContent = '保存中...'; saveBtn.disabled = true; }
   try{
     const db = await getFirestore();
-    await db.collection('voucher_archives').doc(id).update({ filename: newFilename });
+    await db.collection('vouchers').doc(id).update({ filename: newFilename });
     // ローカルキャッシュも更新
     if(window._archiveCache){
       const rec = window._archiveCache.find(r => r.id === id);
