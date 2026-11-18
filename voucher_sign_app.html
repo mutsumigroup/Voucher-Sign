@@ -333,7 +333,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="mode-label">モードを選択</div>
 
       <!-- 保留中サインバナー（保留件数がある時のみ表示） -->
-      <div id="pendingBanner" style="display:none;background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:12px 16px;cursor:pointer;transition:opacity .15s;" onclick="showPendingList()">
+      <div id="pendingBanner" style="display:none;background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:12px 16px;cursor:pointer;transition:opacity .15s;" onclick="showSignUpload()">
         <div style="display:flex;align-items:center;gap:10px;">
           <div style="font-size:24px;">⏳</div>
           <div style="flex:1;">
@@ -417,11 +417,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.6</span>
+          <span class="version-current">v4.7</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.7</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>バグ修正：モード選択画面の「保留中のサイン」バナーをタップすると空白画面になる問題を修正</li>
+            <li>バナーのタップ先を正しく「サイン収集」画面（保留リストが表示される場所）に変更</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.6</span>
