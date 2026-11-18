@@ -366,34 +366,25 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
         </div>
       </div>
 
-      <!-- PDF事前登録ボタン -->
-      <div style="border-top:1px solid #e2e8f0;padding-top:10px;">
-        <label id="pendingUploadLabel" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1.5px dashed #d1dce8;border-radius:12px;cursor:pointer;background:#f8fafc;transition:border-color .15s;">
-          <div style="font-size:20px;">📥</div>
-          <div>
-            <div style="font-size:13px;font-weight:700;color:#1e293b;">バウチャーをあらかじめ登録</div>
-            <div style="font-size:11px;color:#64748b;margin-top:1px;">後でサインするPDFを事前に保存しておく</div>
-          </div>
-          <input type="file" id="pendingFileInput" accept="application/pdf" multiple style="display:none;">
-        </label>
-      </div>
-    </div>
-
-    <!-- 保留中リスト画面 -->
-    <div id="pendingListArea" style="display:none;flex-direction:column;gap:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="sec-label">⏳ 保留中のサイン</div>
-        <label style="padding:6px 12px;border-radius:8px;border:1.5px solid #f59e0b;background:#fff;color:#d97706;font-size:12px;font-weight:700;cursor:pointer;">
-          ＋ 追加
-          <input type="file" id="pendingAddInput" accept="application/pdf" multiple style="display:none;">
-        </label>
-      </div>
-      <div id="pendingList" style="display:flex;flex-direction:column;gap:8px;"></div>
-      <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
     </div>
 
     <!-- サインモード：PDFアップロード -->
     <div id="signUploadArea" style="display:none;flex-direction:column;gap:12px;">
+
+      <!-- 保留中サインリスト（保留あり時のみ表示） -->
+      <div id="pendingInSignArea" style="display:none;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="sec-label" style="color:#d97706;">⏳ 保留中のサイン</div>
+          <label style="padding:5px 10px;border-radius:8px;border:1.5px solid #f59e0b;background:#fff;color:#d97706;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">
+            ＋ PDF追加
+            <input type="file" id="pendingAddInput" accept="application/pdf" multiple style="display:none;">
+          </label>
+        </div>
+        <div id="pendingList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <div style="border-bottom:1px solid #e2e8f0;margin:4px 0;"></div>
+      </div>
+
+      <!-- 新規PDFアップロード -->
       <label for="fileInput" class="upload-box" id="uploadBox" style="cursor:pointer;display:block;">
         <div class="upload-icon">📄</div>
         <div class="upload-label">タップしてPDFを選択</div>
@@ -404,30 +395,46 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
         <strong>Sign列を自動検出</strong><br>
         PDFをスキャンして各クルーのサイン欄を自動で見つけます。複数選択した場合は順番にサインできます。
       </div>
+
+      <!-- 事前登録ボタン -->
+      <label id="pendingUploadLabel" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1.5px dashed #d1dce8;border-radius:12px;cursor:pointer;background:#f8fafc;">
+        <div style="font-size:20px;">📥</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#1e293b;">バウチャーをあらかじめ登録</div>
+          <div style="font-size:11px;color:#64748b;margin-top:1px;">後でサインするPDFを今すぐ保存</div>
+        </div>
+        <input type="file" id="pendingFileInput" accept="application/pdf" multiple style="display:none;">
+      </label>
+
       <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
     </div>
+
+    <!-- 保留中リスト画面（使わなくなったが互換性のため残す） -->
+    <div id="pendingListArea" style="display:none;flex-direction:column;gap:10px;"></div>
 
     <!-- Version History -->
     <div class="version-card">
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.3</span>
+          <span class="version-current">v4.4</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
         <div class="version-item">
           <div class="version-item-header">
-            <span class="ver-num">v4.3</span>
+            <span class="ver-num">v4.4</span>
             <span class="ver-date">2026/11/18</span>
             <span class="ver-tag new">New</span>
           </div>
           <ul class="ver-changes">
-            <li>バウチャー事前登録機能：サイン前にPDFをあらかじめFirebaseに保存しておける</li>
-            <li>モード選択画面に「保留中のサイン X件」バナーを表示 — タップで一覧へ</li>
-            <li>保留中一覧から「✍️ サイン」ボタンでそのままサイン収集画面へ移動</li>
-            <li>サイン完了・保存後に保留レコードを自動削除（バナー件数が自動更新）</li>
+            <li>保留中PDFをサイン収集画面内に直接表示（別画面遷移なし）</li>
+            <li>「サイン収集」をタップするとその場で未サインPDFが一覧表示される</li>
+            <li>「📥 バウチャーをあらかじめ登録」ボタンもサイン収集画面内に統合</li>
+            <li>バウチャー事前登録機能：サイン前にPDFをFirebaseに保存しておける</li>
+            <li>モード選択画面に「⏳ 保留中のサイン X件」バナー追加</li>
+            <li>サイン完了・保存後に保留レコードを自動削除</li>
           </ul>
         </div>
         <div class="version-item">
@@ -1296,9 +1303,12 @@ function resetApp(){
 }
 
 /* ── モード切替 ── */
-function showSignUpload(){
+async function showSignUpload(){
   document.getElementById('modeSelect').style.display='none';
   document.getElementById('signUploadArea').style.display='flex';
+  document.getElementById('headerSub').textContent='サイン収集';
+  // 保留中PDFを読み込んでリストに表示
+  await refreshPendingInSignArea();
 }
 function showReceiptAttach(){
   document.getElementById('uploadScreen').style.display='none';
@@ -2556,6 +2566,35 @@ async function refreshPendingBanner(){
   }catch(e){ /* 無視 */ }
 }
 
+// サイン収集画面内の保留リストを更新
+async function refreshPendingInSignArea(){
+  const area = document.getElementById('pendingInSignArea');
+  const listEl = document.getElementById('pendingList');
+  if(!area || !listEl) return;
+  try{
+    const records = await getPendingPdfs();
+    if(records.length === 0){
+      area.style.display = 'none';
+      return;
+    }
+    area.style.display = 'flex';
+    listEl.innerHTML = records.map(r => {
+      const d = new Date(r.savedAt);
+      const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      return `
+        <div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;" id="pending_item_${r.id}">
+          <div style="font-size:18px;">⏳</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(r.filename)}</div>
+            <div style="font-size:10px;color:#92400e;margin-top:1px;">登録: ${dateStr}</div>
+          </div>
+          <button style="padding:7px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;" onclick="loadPendingPdf('${r.id}')">✍️ サイン</button>
+          <button style="padding:7px 9px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#ef4444;font-size:12px;cursor:pointer;" onclick="removePendingItem('${r.id}')">🗑</button>
+        </div>`;
+    }).join('');
+  }catch(e){ area.style.display='none'; }
+}
+
 // 保留中リスト画面を表示
 async function showPendingList(){
   document.getElementById('modeSelect').style.display='none';
@@ -2617,11 +2656,9 @@ async function loadPendingPdf(id){
 async function removePendingItem(id){
   if(!confirm('この保留中PDFを削除しますか？')) return;
   await deletePendingPdf(id);
-  document.getElementById('pending_item_'+id)?.remove();
   refreshPendingBanner();
-  // リストが空になったらメッセージ表示
-  const listEl = document.getElementById('pendingList');
-  if(listEl && listEl.children.length === 0) renderPendingList();
+  // サイン収集画面内のリストを更新
+  await refreshPendingInSignArea();
 }
 
 // サイン収集完了後、保留PDFを削除
@@ -2654,18 +2691,12 @@ async function _registerPendingFiles(files, sourceId){
 
   if(saved > 0){
     await refreshPendingBanner();
-    // 保留リスト画面が開いている場合は更新
-    if(document.getElementById('pendingListArea').style.display==='flex'){
-      await renderPendingList();
-    } else {
-      // モード選択画面にいる場合はバナーをアニメーション
-      const banner = document.getElementById('pendingBanner');
-      if(banner && banner.style.display!=='none'){
-        banner.style.transform='scale(1.02)';
-        setTimeout(()=>{ banner.style.transform=''; }, 300);
-      }
-      alert(`${saved}件のPDFを保留に登録しました`);
+    // サイン収集画面が開いている場合はリストを更新
+    const signArea = document.getElementById('signUploadArea');
+    if(signArea && signArea.style.display==='flex'){
+      await refreshPendingInSignArea();
     }
+    alert(`${saved}件のPDFを保留に登録しました`);
   }
 }
 
