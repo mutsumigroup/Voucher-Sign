@@ -374,11 +374,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.1</span>
+          <span class="version-current">v4.2</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.2</span>
+            <span class="ver-date">2026/11/18</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>重複保存検知機能を追加：同じPDFを2回保存しようとすると警告ダイアログを表示</li>
+            <li>署名済み一覧で重複アイテムに「⚠️ 重複」バッジを表示（黄色背景でハイライト）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.1</span>
@@ -2306,12 +2317,45 @@ function base64ToUint8(b64){
   return u8;
 }
 
+/* ── PDF簡易チェックサム（先頭+末尾+サイズで重複検知） ── */
+function _pdfChecksum(bytes){
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const size = u8.length;
+  // 先頭64バイト + 末尾64バイト + サイズを連結してハッシュ代わりに使用
+  let head = '', tail = '';
+  for(let i=0;i<Math.min(64,size);i++) head += u8[i].toString(16).padStart(2,'0');
+  for(let i=Math.max(0,size-64);i<size;i++) tail += u8[i].toString(16).padStart(2,'0');
+  return `${size}:${head}:${tail}`;
+}
+
 async function saveToArchive(pdfBytes, filename, type, customDate){
   // type: 'sign' | 'receipt' | 'upload'
   // customDate: 'YYYY-MM-DD' string (optional, for upload type)
   try{
     const db = await getFirestore();
     const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+
+    // ── 重複チェック（同じPDFが既に保存されていないか確認） ──
+    const checksum = _pdfChecksum(bytes);
+    try{
+      const existing = await db.collection('vouchers')
+        .where('checksum','==',checksum).limit(1).get();
+      if(!existing.empty){
+        const dup = existing.docs[0].data();
+        const dupDate = dup.savedAt ? new Date(dup.savedAt).toLocaleDateString('ja-JP') : '不明';
+        const dupName = dup.filename || '不明';
+        const proceed = confirm(
+          `⚠️ このPDFは既に保存されている可能性があります。\n\n` +
+          `既存ファイル名: ${dupName}\n保存日: ${dupDate}\n\n` +
+          `重複している可能性があります。続けて保存しますか？`
+        );
+        if(!proceed) return null; // キャンセル
+      }
+    }catch(dupErr){
+      // 重複チェック失敗は無視して保存続行
+      console.warn('duplicate check failed:', dupErr);
+    }
+
     let savedAt;
     if(customDate){
       // 日付のみ: YYYY-MM-DD → その日の正午ISOとして保存（タイムゾーン問題を避ける）
@@ -2323,6 +2367,7 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
       filename,
       type,
       savedAt,
+      checksum,  // 重複検知用チェックサム
       dateOnly: !!customDate,  // 日付のみフラグ
       pdfBase64: uint8ToBase64(bytes)
     };
@@ -2471,6 +2516,18 @@ async function renderArchive(){
       </div>
     </div>`;
 
+  // ── 重複チェックサムを検出 ──
+  const checksumCounts = new Map();
+  for(const r of allRecords){
+    if(r.checksum){
+      checksumCounts.set(r.checksum, (checksumCounts.get(r.checksum)||0)+1);
+    }
+  }
+  // 重複しているIDセット
+  const duplicateChecksums = new Set([...checksumCounts.entries()].filter(([,v])=>v>1).map(([k])=>k));
+  // 各レコードに重複フラグを付与
+  allRecords.forEach(r => { r._isDuplicate = r.checksum && duplicateChecksums.has(r.checksum); });
+
   // フィルター適用
   const records = _archiveShipFilter
     ? allRecords.filter(r => extractShipName(r.filename) === _archiveShipFilter)
@@ -2554,13 +2611,17 @@ function renderArchiveItem(r){
   const typeClass = r.type === 'receipt' ? 'receipt' : r.type === 'upload' ? 'upload' : 'sign';
   const checked = archiveSelectedIds.has(r.id);
   const confirmed = r.confirmed === true;
+  const dupBadge = r._isDuplicate
+    ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid #fcd34d;" title="同じPDFが複数回保存されています">⚠️ 重複</span>`
+    : '';
   return `
-    <div class="archive-item${confirmed?' confirmed':''}" id="aitem_${r.id}">
+    <div class="archive-item${confirmed?' confirmed':''}${r._isDuplicate?' dup-item':''}" id="aitem_${r.id}" ${r._isDuplicate?'style="background:#fffbeb;"':''}>
       <div class="archive-item-check${checked?' checked':''}" onclick="toggleArchiveSelect('${r.id}')"></div>
       <div class="archive-item-info" onclick="toggleArchiveSelect('${r.id}')">
         <div class="archive-item-name">${escHtml(r.filename)}</div>
         <div class="archive-item-meta">
           <span class="archive-item-type ${typeClass}">${typeLabel}</span>
+          ${dupBadge}
           <span>${dateStr}</span>
         </div>
       </div>
