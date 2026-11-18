@@ -417,11 +417,25 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.7</span>
+          <span class="version-current">v4.8</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.8</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「署名済み一覧」に📋 Voucherチェック機能を追加</li>
+            <li>確認用PDF（受け取った原本）を複数アップロードし、PDF内のテキスト（伝票番号・船名・区分・金額）を自動抽出</li>
+            <li>サインアプリ保存済みPDFと伝票番号で突き合わせ、「未登録（不足）」「余分」を自動検出</li>
+            <li>伝票番号が一致しても内容（船名・区分・金額・日付）が違う場合は「内容相違」として警告表示</li>
+            <li>各結果アイテムをタップするとPDFプレビューで中身を確認できる</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.7</span>
@@ -786,9 +800,12 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 
   <!-- 署名済み一覧スクリーン -->
   <div class="archive-screen" id="archiveScreen">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
       <div class="sec-label">📂 署名済み一覧</div>
-      <button class="archive-add-btn" onclick="document.getElementById('archiveUploadInput').click()">＋ PDFを追加</button>
+      <div style="display:flex;gap:6px;">
+        <button class="archive-add-btn" style="border-color:#16a34a;background:#f0fdf4;color:#16a34a;" onclick="showVoucherCheck()">📋 Voucherチェック</button>
+        <button class="archive-add-btn" onclick="document.getElementById('archiveUploadInput').click()">＋ PDFを追加</button>
+      </div>
       <input type="file" id="archiveUploadInput" accept="application/pdf" style="display:none" onchange="handleArchiveUpload(event)">
     </div>
     <!-- 一括操作バー（選択時のみ表示） -->
@@ -816,6 +833,81 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     </div>
     <div id="archiveList"></div>
     <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
+  </div>
+
+  <!-- Voucherチェック画面（整合性確認） -->
+  <div class="archive-screen" id="voucherCheckScreen" style="display:none;">
+    <div class="sec-label">📋 Voucherチェック（整合性確認）</div>
+    <div style="background:#fff;border:1px solid #d1dce8;border-radius:10px;padding:12px 14px;font-size:12px;color:#64748b;line-height:1.7;">
+      確認したいVoucher PDF（受け取った原本）を複数選択してください。<br>
+      <strong style="color:#1e293b;">サインアプリに保存済みのPDF</strong>と内容（伝票番号・船名・区分など）を突き合わせて、
+      <strong style="color:#d97706;">不足</strong>や<strong style="color:#d97706;">余分</strong>がないか確認します。
+    </div>
+    <label id="vcheckUploadLabel" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:20px 16px;border:2px dashed #16a34a;border-radius:14px;cursor:pointer;background:#f0fdf4;">
+      <div style="font-size:28px;">📥</div>
+      <div>
+        <div style="font-size:14px;font-weight:800;color:#15803d;">確認用PDFを選択（複数可）</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">タップしてVoucher PDFをまとめて選択</div>
+      </div>
+      <input type="file" id="vcheckFileInput" accept="application/pdf" multiple style="display:none;">
+    </label>
+
+    <div id="vcheckProgress" style="display:none;text-align:center;padding:20px;color:#64748b;font-size:13px;">
+      <div class="spinner" style="margin:0 auto 10px;"></div>
+      <div id="vcheckProgressText">PDFを解析中...</div>
+    </div>
+
+    <div id="vcheckResults" style="display:none;flex-direction:column;gap:12px;">
+      <!-- サマリー -->
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;background:#f0fdf4;border:1.5px solid #16a34a;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:900;color:#16a34a;" id="vcheckMatchCount">0</div>
+          <div style="font-size:11px;color:#15803d;font-weight:700;">一致</div>
+        </div>
+        <div style="flex:1;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:900;color:#d97706;" id="vcheckMissingCount">0</div>
+          <div style="font-size:11px;color:#b45309;font-weight:700;">未登録（不足）</div>
+        </div>
+        <div style="flex:1;background:#fee2e2;border:1.5px solid #ef4444;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:900;color:#dc2626;" id="vcheckExtraCount">0</div>
+          <div style="font-size:11px;color:#b91c1c;font-weight:700;">余分</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;background:#fff7ed;border:1.5px solid #fb923c;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:900;color:#ea580c;" id="vcheckMismatchCount">0</div>
+          <div style="font-size:11px;color:#c2410c;font-weight:700;">内容相違あり</div>
+        </div>
+      </div>
+
+      <!-- 未登録（アップロードしたがアプリに無い） -->
+      <div id="vcheckMissingSection" style="display:none;">
+        <div class="sec-label" style="color:#d97706;">⚠️ 未登録（サインアプリに見当たりません）</div>
+        <div id="vcheckMissingList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <!-- 余分（アプリにあるがアップロードしていない） -->
+      <div id="vcheckExtraSection" style="display:none;">
+        <div class="sec-label" style="color:#dc2626;">⚠️ 余分（アップロードリストに見当たりません）</div>
+        <div id="vcheckExtraList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <!-- 内容相違 -->
+      <div id="vcheckMismatchSection" style="display:none;">
+        <div class="sec-label" style="color:#ea580c;">⚠️ 内容相違（伝票は一致、内容に差異あり）</div>
+        <div id="vcheckMismatchList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <!-- 一致（折りたたみ） -->
+      <div>
+        <div class="sec-label" style="cursor:pointer;color:#16a34a;" onclick="toggleVcheckMatched()">✅ 一致したVoucher（タップで表示） <span id="vcheckMatchedArrow">▼</span></div>
+        <div id="vcheckMatchedList" style="display:none;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <button style="padding:10px;border-radius:10px;border:1.5px solid #d1dce8;background:#fff;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;" onclick="resetVoucherCheck()">🔄 別のPDFで再チェック</button>
+    </div>
+
+    <button class="ra-back" onclick="backToArchiveFromCheck()">← 署名済み一覧に戻る</button>
   </div>
 </div>
 
@@ -2532,6 +2624,8 @@ function backToModeSelect(){
   document.getElementById('receiptAttachScreen').style.display='none';
   document.getElementById('archiveScreen').style.display='none';
   document.getElementById('pendingListArea').style.display='none';
+  const vcs = document.getElementById('voucherCheckScreen');
+  if(vcs) vcs.style.display='none';
   document.getElementById('modeSelect').style.display='flex';
   document.getElementById('headerSub').textContent='PDFをアップロードして開始';
   archiveSelectedIds = new Set();
@@ -2752,6 +2846,278 @@ function extractShipName(filename){
   const parts = filename.replace(/\.pdf$/i,'').split('_');
   if(parts.length >= 2) return parts.slice(0, Math.min(3, parts.length-1)).join(' ');
   return filename.replace(/\.pdf$/i,'');
+}
+
+/* ══════════════════════════════════════════
+   Voucherチェック（整合性確認）機能
+   PDF内のテキストから伝票番号・船名・区分等を抽出し、
+   アップロードした原本とサインアプリ保存済みPDFを突き合わせる
+══════════════════════════════════════════ */
+
+// PDF（1ページ目）の全文テキストを抽出
+async function _extractPdfFullText(bytes){
+  try{
+    const doc = await pdfjsLib.getDocument({data:bytes.slice(), stopAtErrors:false}).promise;
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    return content.items.map(it=>it.str).join(' ').replace(/\s+/g,' ').trim();
+  }catch(e){
+    console.warn('PDFテキスト抽出失敗:', e);
+    return '';
+  }
+}
+
+// 全文テキストから Voucher情報を抽出
+function _parseVoucherInfo(text){
+  // 伝票番号: "2026-A0031" のようなパターン（年-英字+数字）
+  const noMatch = text.match(/\b(\d{4}-[A-Z]\d{3,6})\b/);
+  // 船名: "Name of Vessel: XXX" の直後
+  const shipMatch = text.match(/Name of Vessel:?\s*([A-Z0-9][A-Z0-9 .\-]*?)(?:\s+Port at:|\s+Port:|$)/i);
+  // 区分: "Category: XXX"
+  const catMatch = text.match(/Category:?\s*([A-Za-z]+)/i);
+  // 日付: "Date: 2026/Nov/17" 形式
+  const dateMatch = text.match(/Date:?\s*([0-9]{4}\/[A-Za-z]{3}\/[0-9]{1,2})/i);
+  // 合計金額: "Total JPY 1,000"
+  const totalMatch = text.match(/Total\s*JPY\s*([\d,]+)/i);
+  return {
+    voucherNo: noMatch ? noMatch[1].toUpperCase() : null,
+    ship: shipMatch ? shipMatch[1].trim() : null,
+    category: catMatch ? catMatch[1].trim() : null,
+    date: dateMatch ? dateMatch[1].trim() : null,
+    total: totalMatch ? totalMatch[1].replace(/,/g,'') : null,
+    rawText: text
+  };
+}
+
+async function extractVoucherInfo(bytes){
+  const text = await _extractPdfFullText(bytes);
+  const info = _parseVoucherInfo(text);
+  return info;
+}
+
+// 2つのVoucher情報を比較して内容相違があるか判定
+function _voucherInfoDiffers(a, b){
+  const diffs = [];
+  if(a.ship && b.ship && a.ship !== b.ship) diffs.push(`船名: ${a.ship} ≠ ${b.ship}`);
+  if(a.category && b.category && a.category.toLowerCase() !== b.category.toLowerCase()) diffs.push(`区分: ${a.category} ≠ ${b.category}`);
+  if(a.total && b.total && a.total !== b.total) diffs.push(`金額: ${a.total} ≠ ${b.total}`);
+  if(a.date && b.date && a.date !== b.date) diffs.push(`日付: ${a.date} ≠ ${b.date}`);
+  return diffs;
+}
+
+/* ── Voucherチェック画面の制御 ── */
+let _vcheckUploadedFiles = []; // {file, bytes, info}
+let _vcheckResult = null;
+
+function showVoucherCheck(){
+  document.getElementById('archiveScreen').style.display='none';
+  document.getElementById('voucherCheckScreen').style.display='flex';
+  document.getElementById('headerSub').textContent='Voucherチェック';
+  resetVoucherCheck();
+}
+
+function backToArchiveFromCheck(){
+  document.getElementById('voucherCheckScreen').style.display='none';
+  document.getElementById('archiveScreen').style.display='flex';
+  document.getElementById('headerSub').textContent='署名済み一覧';
+}
+
+function resetVoucherCheck(){
+  _vcheckUploadedFiles = [];
+  _vcheckResult = null;
+  document.getElementById('vcheckFileInput').value = '';
+  document.getElementById('vcheckResults').style.display = 'none';
+  document.getElementById('vcheckProgress').style.display = 'none';
+  document.getElementById('vcheckUploadLabel').style.display = 'flex';
+}
+
+document.addEventListener('change', e=>{
+  if(e.target.id==='vcheckFileInput'){
+    const files = Array.from(e.target.files).filter(f=>f.type==='application/pdf');
+    if(files.length===0) return;
+    runVoucherCheck(files);
+  }
+});
+
+async function runVoucherCheck(files){
+  document.getElementById('vcheckUploadLabel').style.display = 'none';
+  document.getElementById('vcheckResults').style.display = 'none';
+  const progress = document.getElementById('vcheckProgress');
+  const progressText = document.getElementById('vcheckProgressText');
+  progress.style.display = 'block';
+
+  try{
+    // ① アップロードされたPDFを解析
+    _vcheckUploadedFiles = [];
+    for(let i=0;i<files.length;i++){
+      progressText.textContent = `アップロードPDFを解析中... (${i+1}/${files.length})`;
+      const f = files[i];
+      const ab = await f.arrayBuffer();
+      const bytes = new Uint8Array(ab);
+      const info = await extractVoucherInfo(bytes);
+      _vcheckUploadedFiles.push({file:f, filename:f.name, bytes, info});
+    }
+
+    // ② サインアプリ保存済みPDF（pending以外）を取得・解析
+    const archiveRecords = await getAllArchive();
+    const archiveParsed = [];
+    for(let i=0;i<archiveRecords.length;i++){
+      progressText.textContent = `保存済みPDFと照合中... (${i+1}/${archiveRecords.length})`;
+      const r = archiveRecords[i];
+      try{
+        const bytes = base64ToUint8(r.pdfBase64);
+        const info = await extractVoucherInfo(bytes);
+        archiveParsed.push({record:r, info});
+      }catch(e){ /* スキップ */ }
+    }
+
+    // ③ 伝票番号で突き合わせ
+    progressText.textContent = '結果をまとめています...';
+    const matched = [];     // {uploaded, archived}
+    const missing = [];     // uploadedのみ（アプリに無い）
+    const extra = [];       // archivedのみ（アップロードしていない）
+    const mismatched = [];  // 伝票一致だが内容相違
+
+    const archiveUsed = new Set();
+    for(const up of _vcheckUploadedFiles){
+      if(!up.info.voucherNo){
+        // 伝票番号が読み取れない場合は不明として「未登録」扱い（要目視確認）
+        missing.push({uploaded: up, reason:'伝票番号を読み取れませんでした'});
+        continue;
+      }
+      const foundIdx = archiveParsed.findIndex((a,idx)=> !archiveUsed.has(idx) && a.info.voucherNo === up.info.voucherNo);
+      if(foundIdx === -1){
+        missing.push({uploaded: up, reason:'サインアプリに同じ伝票番号が見つかりません'});
+      } else {
+        archiveUsed.add(foundIdx);
+        const arch = archiveParsed[foundIdx];
+        const diffs = _voucherInfoDiffers(up.info, arch.info);
+        if(diffs.length > 0){
+          mismatched.push({uploaded: up, archived: arch, diffs});
+        } else {
+          matched.push({uploaded: up, archived: arch});
+        }
+      }
+    }
+    archiveParsed.forEach((a, idx)=>{
+      if(!archiveUsed.has(idx)) extra.push({archived: a});
+    });
+
+    _vcheckResult = {matched, missing, extra, mismatched};
+    renderVoucherCheckResult();
+
+  }catch(e){
+    alert('チェック中にエラーが発生しました: ' + e.message);
+    resetVoucherCheck();
+  } finally {
+    progress.style.display = 'none';
+  }
+}
+
+function renderVoucherCheckResult(){
+  const r = _vcheckResult;
+  if(!r) return;
+  document.getElementById('vcheckResults').style.display = 'flex';
+
+  document.getElementById('vcheckMatchCount').textContent = r.matched.length;
+  document.getElementById('vcheckMissingCount').textContent = r.missing.length;
+  document.getElementById('vcheckExtraCount').textContent = r.extra.length;
+  document.getElementById('vcheckMismatchCount').textContent = r.mismatched.length;
+
+  // 未登録
+  const missingSec = document.getElementById('vcheckMissingSection');
+  const missingList = document.getElementById('vcheckMissingList');
+  if(r.missing.length > 0){
+    missingSec.style.display = 'block';
+    missingList.innerHTML = r.missing.map((m,i)=>{
+      const no = m.uploaded.info.voucherNo || '(伝票番号不明)';
+      const ship = m.uploaded.info.ship || '';
+      return `
+        <div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="previewVcheckUploaded(${i})">
+          <div style="font-size:18px;">⚠️</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(m.uploaded.filename)}</div>
+            <div style="font-size:10px;color:#92400e;margin-top:1px;">伝票No: ${escHtml(no)} ${ship?'／'+escHtml(ship):''} — ${escHtml(m.reason)}</div>
+          </div>
+          <div style="font-size:16px;color:#f59e0b;">👁</div>
+        </div>`;
+    }).join('');
+  } else { missingSec.style.display = 'none'; }
+
+  // 余分
+  const extraSec = document.getElementById('vcheckExtraSection');
+  const extraList = document.getElementById('vcheckExtraList');
+  if(r.extra.length > 0){
+    extraSec.style.display = 'block';
+    extraList.innerHTML = r.extra.map((m,i)=>{
+      const no = m.archived.info.voucherNo || '(伝票番号不明)';
+      const ship = m.archived.info.ship || '';
+      return `
+        <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="previewVcheckArchived('${m.archived.record.id}')">
+          <div style="font-size:18px;">⚠️</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(m.archived.record.filename)}</div>
+            <div style="font-size:10px;color:#b91c1c;margin-top:1px;">伝票No: ${escHtml(no)} ${ship?'／'+escHtml(ship):''} — アップロードリストに見当たりません</div>
+          </div>
+          <div style="font-size:16px;color:#ef4444;">👁</div>
+        </div>`;
+    }).join('');
+  } else { extraSec.style.display = 'none'; }
+
+  // 内容相違
+  const mismatchSec = document.getElementById('vcheckMismatchSection');
+  const mismatchList = document.getElementById('vcheckMismatchList');
+  if(r.mismatched.length > 0){
+    mismatchSec.style.display = 'block';
+    mismatchList.innerHTML = r.mismatched.map((m,i)=>{
+      return `
+        <div style="background:#fff7ed;border:1.5px solid #fb923c;border-radius:10px;padding:10px 12px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-size:18px;">⚠️</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;color:#1e293b;">${escHtml(m.uploaded.info.voucherNo||'')}</div>
+              <div style="font-size:10px;color:#c2410c;margin-top:1px;">${m.diffs.map(escHtml).join(' ／ ')}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <button style="flex:1;padding:6px;border-radius:8px;border:1.5px solid #fb923c;background:#fff;color:#ea580c;font-size:11px;font-weight:700;cursor:pointer;" onclick="previewVcheckUploaded(${_vcheckUploadedFiles.indexOf(m.uploaded)})">👁 アップロード原本</button>
+            <button style="flex:1;padding:6px;border-radius:8px;border:1.5px solid #fb923c;background:#fff;color:#ea580c;font-size:11px;font-weight:700;cursor:pointer;" onclick="previewVcheckArchived('${m.archived.record.id}')">👁 保存済みPDF</button>
+          </div>
+        </div>`;
+    }).join('');
+  } else { mismatchSec.style.display = 'none'; }
+
+  // 一致（折りたたみ・初期は閉じる）
+  const matchedList = document.getElementById('vcheckMatchedList');
+  matchedList.innerHTML = r.matched.map(m=>{
+    const no = m.uploaded.info.voucherNo || '';
+    const ship = m.uploaded.info.ship || '';
+    return `
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="previewVcheckArchived('${m.archived.record.id}')">
+        <div style="font-size:14px;">✅</div>
+        <div style="flex:1;min-width:0;font-size:12px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(no)} ${ship?'— '+escHtml(ship):''}</div>
+      </div>`;
+  }).join('');
+}
+
+function toggleVcheckMatched(){
+  const list = document.getElementById('vcheckMatchedList');
+  const arrow = document.getElementById('vcheckMatchedArrow');
+  const isOpen = list.style.display === 'flex';
+  list.style.display = isOpen ? 'none' : 'flex';
+  arrow.textContent = isOpen ? '▼' : '▲';
+}
+
+// アップロード原本PDFをプレビュー
+async function previewVcheckUploaded(idx){
+  const item = _vcheckUploadedFiles[idx];
+  if(!item) return;
+  _openPdfPreviewFromBytes(item.bytes, item.filename);
+}
+
+// アーカイブ済みPDFをプレビュー（既存のpreviewArchiveItemを流用）
+async function previewVcheckArchived(id){
+  await previewArchiveItem(id);
 }
 
 async function renderArchive(){
@@ -3054,6 +3420,15 @@ async function previewArchiveItem(id){
     const r = await getArchiveById(id);
     if(!r) return;
     const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : (r.pdfBytes || new Uint8Array());
+    _openPdfPreviewFromBytes(bytes, r.filename);
+  }catch(e){
+    alert('プレビューに失敗しました: ' + e.message);
+  }
+}
+
+// 汎用：任意のバイト列＋ファイル名でPDFプレビューを開く
+function _openPdfPreviewFromBytes(bytes, filename){
+  try{
     const blob = new Blob([bytes], {type:'application/pdf'});
 
     // 前回のBlobURLを解放
@@ -3061,7 +3436,7 @@ async function previewArchiveItem(id){
     _previewBlobUrl = URL.createObjectURL(blob);
 
     const overlay = document.getElementById('pdfPreviewOverlay');
-    document.getElementById('pdfPreviewTitle').textContent = r.filename;
+    document.getElementById('pdfPreviewTitle').textContent = filename;
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
 
@@ -3072,7 +3447,7 @@ async function previewArchiveItem(id){
       body.innerHTML = `
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;">
           <div style="font-size:48px;">📄</div>
-          <div style="color:#fff;font-size:15px;font-weight:600;">${escHtml(r.filename)}</div>
+          <div style="color:#fff;font-size:15px;font-weight:600;">${escHtml(filename)}</div>
           <button onclick="window.open('${_previewBlobUrl}','_blank')"
             style="padding:14px 28px;border-radius:12px;border:none;background:#7c3aed;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">
             📂 PDFを開く
