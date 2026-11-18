@@ -374,11 +374,25 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.0</span>
+          <span class="version-current">v4.1</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.1</span>
+            <span class="ver-date">2026/11/18</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>複数PDFを一度に選択して連続サイン対応（PDF 1枚ずつ順番にサイン）</li>
+            <li>PDFナビゲーターバー追加（現在のPDF番号・進捗ドット表示）</li>
+            <li>「次のPDFへ」ボタンで自動保存してから次のPDFへ移動</li>
+            <li>全PDF完了後に署名済み一覧へ自動移動</li>
+            <li>PDF名変更機能の修正（正しいコレクション名 vouchers を使用）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.0</span>
@@ -761,16 +775,96 @@ let _pdfQueueSaved = [];   // 各PDFの保存状態 {saved: bool}
 /* ── UPLOAD ── */
 // fileInputはlabel内にあるため、document委任で確実に拾う
 document.addEventListener('change', e=>{
-  if(e.target.id==='fileInput' && e.target.files[0]) loadPDF(e.target.files[0]);
+  if(e.target.id==='fileInput' && e.target.files.length > 0){
+    const files = Array.from(e.target.files).filter(f=>f.type==='application/pdf');
+    if(files.length === 0) return;
+    if(files.length === 1){
+      _pdfQueue = []; _pdfQueueIndex = 0; _pdfQueueSaved = [];
+      loadPDF(files[0]);
+    } else {
+      startPdfQueue(files);
+    }
+  }
 });
 const uploadBox=document.getElementById('uploadBox');
 uploadBox.addEventListener('dragover', e=>{ e.preventDefault(); uploadBox.classList.add('drag'); });
 uploadBox.addEventListener('dragleave', ()=>uploadBox.classList.remove('drag'));
 uploadBox.addEventListener('drop', e=>{
   e.preventDefault(); uploadBox.classList.remove('drag');
-  const f=e.dataTransfer.files[0];
-  if(f && f.type==='application/pdf') loadPDF(f);
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type==='application/pdf');
+  if(files.length === 0) return;
+  if(files.length === 1){
+    _pdfQueue = []; _pdfQueueIndex = 0; _pdfQueueSaved = [];
+    loadPDF(files[0]);
+  } else {
+    startPdfQueue(files);
+  }
 });
+
+/* ── 複数PDFキュー処理 ── */
+function startPdfQueue(files){
+  _pdfQueue = files;
+  _pdfQueueIndex = 0;
+  _pdfQueueSaved = files.map(()=>({saved:false}));
+  loadPDF(files[0]);
+}
+
+function updateMultiPdfNav(){
+  const nav = document.getElementById('multiPdfNav');
+  const indicator = document.getElementById('multiPdfIndicator');
+  const progress = document.getElementById('multiPdfProgress');
+  if(_pdfQueue.length <= 1){
+    nav.style.display = 'none';
+    document.getElementById('nextPdfBtn').style.display = 'none';
+    document.getElementById('allDonePdfBtn').style.display = 'none';
+    return;
+  }
+  nav.style.display = 'flex';
+  // ドット表示
+  indicator.innerHTML = _pdfQueue.map((f,i)=>{
+    const isCurrent = i === _pdfQueueIndex;
+    const isSaved = _pdfQueueSaved[i] && _pdfQueueSaved[i].saved;
+    const color = isSaved ? '#16a34a' : (isCurrent ? '#2563eb' : '#94a3b8');
+    const size = isCurrent ? '12px' : '8px';
+    return `<div title="${f.name}" style="width:${size};height:${size};border-radius:50%;background:${color};transition:all .2s;"></div>`;
+  }).join('');
+  progress.textContent = `${_pdfQueueIndex+1} / ${_pdfQueue.length}`;
+
+  // 次へ / 全完了ボタン
+  const isLast = _pdfQueueIndex >= _pdfQueue.length - 1;
+  document.getElementById('nextPdfBtn').style.display = isLast ? 'none' : 'block';
+  document.getElementById('allDonePdfBtn').style.display = isLast ? 'block' : 'none';
+  // 次のPDF名をボタンに表示
+  if(!isLast){
+    const nextFile = _pdfQueue[_pdfQueueIndex+1];
+    document.getElementById('nextPdfBtn').textContent = `次のPDFへ → (${nextFile.name})`;
+  }
+}
+
+async function goNextPdf(){
+  // 現在のPDFを自動保存
+  await _autoSaveCurrentInQueue();
+  _pdfQueueIndex++;
+  if(_pdfQueueIndex < _pdfQueue.length){
+    loadPDF(_pdfQueue[_pdfQueueIndex]);
+  }
+}
+
+async function finishAllPdfs(){
+  // 現在のPDFを自動保存してアーカイブへ
+  await _autoSaveCurrentInQueue();
+  _pdfQueue = []; _pdfQueueIndex = 0; _pdfQueueSaved = [];
+  showArchive();
+}
+
+async function _autoSaveCurrentInQueue(){
+  const btn = document.getElementById('saveToArchiveBtn');
+  // まだ保存されていなければ保存
+  if(btn && btn.textContent.indexOf('✓') === -1){
+    await saveCurrentToArchive();
+  }
+  if(_pdfQueueSaved[_pdfQueueIndex]) _pdfQueueSaved[_pdfQueueIndex].saved = true;
+}
 
 async function loadPDF(file){
   showScreen('processing');
@@ -1089,8 +1183,12 @@ async function loadPDF(file){
     // ファイル名入力欄にセット
     document.getElementById('filenameInput').value = defaultFilename;
     document.getElementById('filenameEditor').classList.remove('visible');
+    // 保存ボタンをリセット（次のPDFに進む際）
+    const archBtn=document.getElementById('saveToArchiveBtn');
+    if(archBtn){archBtn.textContent='📂 署名済み一覧に保存';archBtn.style.cssText='';}
     renderList();
     showScreen('app');
+    updateMultiPdfNav();
 
   }catch(err){
     alert('PDFの読み込みに失敗しました。\n\n'+err.message);
@@ -1122,10 +1220,14 @@ function resetApp(){
   if(!confirm('別のPDFを読み込みますか？\n現在のサインはすべてリセットされます。'))return;
   pdfBytes=null; pageImg=null; crewData=[]; sigs={}; receiptData=null;
   _lastSignedPdfBytes=null; _lastSignedFilename=null;
+  _pdfQueue=[]; _pdfQueueIndex=0; _pdfQueueSaved=[];
   document.getElementById('receiptBox').innerHTML=`<div class='receipt-icon'>🧾</div><div class='receipt-label'>領収書を追加</div><div class='receipt-sub'>JPG / PNG / PDF 対応</div><label style='display:inline-block;margin-top:10px;padding:10px 24px;background:#f59e0b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;'>📂 ファイルを選択<input type='file' id='receiptInput' accept='image/*,application/pdf' style='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;'></label>`;
   document.getElementById('fileInput').value='';
   const archBtn=document.getElementById('saveToArchiveBtn');
   if(archBtn){archBtn.textContent='📂 署名済み一覧に保存';archBtn.style.cssText='';}
+  document.getElementById('nextPdfBtn').style.display='none';
+  document.getElementById('allDonePdfBtn').style.display='none';
+  document.getElementById('multiPdfNav').style.display='none';
   showScreen('upload');
   backToModeSelect();
 }
