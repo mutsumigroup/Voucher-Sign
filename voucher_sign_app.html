@@ -417,11 +417,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.4</span>
+          <span class="version-current">v4.5</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.5</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>バグ修正：事前登録（保留中）したPDFが署名済み一覧に誤って表示される問題を修正</li>
+            <li>署名済み一覧は type:'pending' のレコードを除外するよう修正</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.4</span>
@@ -2445,7 +2456,8 @@ async function getAllArchive(){
   try{
     const db = await getFirestore();
     const snap = await db.collection('vouchers').orderBy('savedAt','desc').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // 「保留中（pending）」のレコードは署名済み一覧には表示しない
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.type !== 'pending');
   }catch(e){
     console.error('getAllArchive error:', e);
     return [];
