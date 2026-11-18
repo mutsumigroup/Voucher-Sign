@@ -359,12 +359,12 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <label for="fileInput" class="upload-box" id="uploadBox" style="cursor:pointer;display:block;">
         <div class="upload-icon">📄</div>
         <div class="upload-label">タップしてPDFを選択</div>
-        <div class="upload-sub">Voucher PDFをここにアップロード</div>
-        <input type="file" id="fileInput" accept="application/pdf">
+        <div class="upload-sub">複数のVoucher PDFを一度に選択可能</div>
+        <input type="file" id="fileInput" accept="application/pdf" multiple>
       </label>
       <div class="upload-note">
         <strong>Sign列を自動検出</strong><br>
-        PDFをスキャンして各クルーのサイン欄を自動で見つけます。
+        PDFをスキャンして各クルーのサイン欄を自動で見つけます。複数選択した場合は順番にサインできます。
       </div>
       <button class="ra-back" onclick="backToModeSelect()">← モード選択に戻る</button>
     </div>
@@ -623,6 +623,12 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   </div>
 
   <div class="app-screen" id="appScreen">
+    <!-- 複数PDFナビゲーター（複数選択時のみ表示） -->
+    <div id="multiPdfNav" style="display:none;background:#1a3252;color:#fff;border-radius:12px;padding:10px 14px;display:none;align-items:center;justify-content:space-between;gap:8px;">
+      <div style="font-size:12px;color:#94a3b8;font-weight:700;">📄 PDF</div>
+      <div id="multiPdfIndicator" style="display:flex;gap:6px;align-items:center;"></div>
+      <div id="multiPdfProgress" style="font-size:13px;font-weight:800;color:#fff;"></div>
+    </div>
     <div class="info-strip" id="infoStrip"></div>
     <div class="sec-label">クルー一覧 — タップしてサイン</div>
     <div id="crewList"></div>
@@ -655,6 +661,9 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     </div>
 
     <button class="save-to-archive-btn" id="saveToArchiveBtn" onclick="saveCurrentToArchive()">📂 署名済み一覧に保存</button>
+    <!-- 複数PDFモード：次へボタン（複数選択時のみ表示） -->
+    <button id="nextPdfBtn" style="display:none;padding:14px;border-radius:12px;border:none;background:#2563eb;color:#fff;font-size:15px;font-weight:800;cursor:pointer;width:100%;" onclick="goNextPdf()">次のPDF へ →</button>
+    <button id="allDonePdfBtn" style="display:none;padding:14px;border-radius:12px;border:none;background:#16a34a;color:#fff;font-size:15px;font-weight:800;cursor:pointer;width:100%;" onclick="finishAllPdfs()">✅ 全PDF完了 — 署名済み一覧へ</button>
     <button class="reset-btn" onclick="resetApp()">&#8635; 別のPDFを読み込む</button>
   </div>
 
@@ -743,6 +752,11 @@ let drawing=false, lastX=0, lastY=0, lastW=3.0, lastVel=0;
 let strokePoints=[];   // 一筆分の点 [{x,y}]
 let allStrokes=[];     // 完了したストローク全て（再描画用）
 let pdfPageW=0, pdfPageH=0; // PDF実際のポイントサイズ
+
+/* ── 複数PDFキュー管理 ── */
+let _pdfQueue = [];        // 選択された複数PDFのFile配列
+let _pdfQueueIndex = 0;    // 現在処理中のインデックス
+let _pdfQueueSaved = [];   // 各PDFの保存状態 {saved: bool}
 
 /* ── UPLOAD ── */
 // fileInputはlabel内にあるため、document委任で確実に拾う
