@@ -417,11 +417,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.5</span>
+          <span class="version-current">v4.6</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.6</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>バグ修正：バウチャーを事前登録しても「保留中のサイン」欄が表示されない問題を修正</li>
+            <li>原因：Firestoreのwhere+orderBy複合クエリが未設定の複合インデックスを要求しエラーになっていた</li>
+            <li>orderByを外しJS側でソートする方式に変更</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.5</span>
@@ -2543,11 +2555,14 @@ async function savePendingPdf(file){
 async function getPendingPdfs(){
   try{
     const db = await getFirestore();
+    // where + orderBy の複合クエリはFirestoreの複合インデックスが必要でエラーになるため、
+    // whereのみ取得してJS側でソートする
     const snap = await db.collection('vouchers')
       .where('type','==','pending')
-      .orderBy('savedAt','desc')
       .get();
-    return snap.docs.map(d=>({id:d.id,...d.data()}));
+    const list = snap.docs.map(d=>({id:d.id,...d.data()}));
+    list.sort((a,b)=> new Date(b.savedAt) - new Date(a.savedAt));
+    return list;
   }catch(e){
     console.error('getPendingPdfs error:', e);
     return [];
