@@ -253,6 +253,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-item-type.sign{background:#dbeafe;color:#1d4ed8;}
 .archive-item-type.receipt{background:#fef3c7;color:#92400e;}
 .archive-item-type.upload{background:#e0f2fe;color:#0369a1;}
+.archive-item-type.merged{background:#ede9fe;color:#6d28d9;}
 .archive-item.confirmed{background:#f0fdf4;}
 .archive-item-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:nowrap;}
 @media (max-width:480px){
@@ -424,11 +425,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.11</span>
+          <span class="version-current">v4.12</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.12</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「1つに結合」した結果のPDFを自動で署名済み一覧に保存するように変更（再アップロード不要）</li>
+            <li>結合に使った元の複数PDFは結合後、署名済み一覧から自動的に削除され重複が残らないように</li>
+            <li>結合したPDFは一覧で「結合」種別として表示</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.11</span>
@@ -3480,8 +3493,8 @@ function renderArchiveItem(r){
   } else {
     dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
-  const typeLabel = r.type === 'receipt' ? '領収書添付' : r.type === 'upload' ? '直接追加' : 'サイン収集';
-  const typeClass = r.type === 'receipt' ? 'receipt' : r.type === 'upload' ? 'upload' : 'sign';
+  const typeLabel = r.type === 'receipt' ? '領収書添付' : r.type === 'upload' ? '直接追加' : r.type === 'merged' ? '結合' : 'サイン収集';
+  const typeClass = r.type === 'receipt' ? 'receipt' : r.type === 'upload' ? 'upload' : r.type === 'merged' ? 'merged' : 'sign';
   const checked = archiveSelectedIds.has(r.id);
   const confirmed = r.confirmed === true;
   const dupBadge = r._isDuplicate
@@ -3710,9 +3723,11 @@ async function mergeAndDownloadSelected(){
   try{
     const ids = [...archiveSelectedIds];
     const mergedDoc = await PDFLib.PDFDocument.create();
+    let firstRecord = null;
     for(const id of ids){
       const r = await getArchiveById(id);
       if(!r) continue;
+      if(!firstRecord) firstRecord = r;
       const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
       if(!bytes.length) continue;
       try{
@@ -3729,14 +3744,37 @@ async function mergeAndDownloadSelected(){
       return;
     }
     const out = await mergedDoc.save();
+
+    // ファイル名：選択件数＋最初のファイル名ベース
+    const firstName = (firstRecord ? firstRecord.filename : 'merged').replace(/\.pdf$/i,'');
+    const mergedFilename = `${firstName}_他${ids.length}件_merged.pdf`;
+
+    // ── 結合したPDFを自動で「署名済み一覧」に保存（再アップロード不要にする） ──
+    let newId = null;
+    try{
+      newId = await saveToArchive(out, mergedFilename, 'merged');
+    }catch(saveErr){
+      console.error('結合PDFの保存に失敗:', saveErr);
+      alert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
+    }
+
+    // 手元にも残せるようダウンロードは従来通り実行
     const blob = new Blob([out], {type:'application/pdf'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    // ファイル名：選択件数＋最初のファイル名ベース
-    const firstName = (await getArchiveById(ids[0]))?.filename?.replace(/\.pdf$/i,'') || 'merged';
-    a.download = `${firstName}_他${ids.length}件_merged.pdf`;
+    a.download = mergedFilename;
     a.href = url; a.click();
     URL.revokeObjectURL(url);
+
+    // ── 保存に成功した場合のみ、結合元のPDFは一覧から削除（重複を残さない） ──
+    if(newId){
+      try{ await deleteArchiveIds(ids); }
+      catch(delErr){ console.warn('結合元PDFの削除に失敗（無視）:', delErr); }
+    }
+
+    archiveSelectedIds = new Set();
+    updateArchiveBulkBar();
+    await renderArchive();
   }catch(e){
     alert('結合に失敗しました: ' + e.message);
   }finally{
