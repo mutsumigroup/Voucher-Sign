@@ -417,11 +417,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.8</span>
+          <span class="version-current">v4.9</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.9</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>署名済み一覧の各アイテムに🧾ボタンを追加 — タップで「領収書添付モード」のSTEP1が自動入力される</li>
+            <li>PDFを選び直す必要がなくなり、そのままSTEP2（領収書）だけ選択すればOK</li>
+            <li>保存後、元の（領収書添付前の）PDFを削除するか確認するダイアログを表示</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.8</span>
@@ -1440,6 +1452,54 @@ function showReceiptAttach(){
   document.getElementById('uploadScreen').style.display='none';
   document.getElementById('receiptAttachScreen').style.display='flex';
   document.getElementById('headerSub').textContent='領収書添付モード';
+}
+
+/* ── 署名済み一覧から直接「領収書添付」を開始 ── */
+let _raSourceArchiveId = null; // 元になった署名済み一覧のID（保存後の削除確認に使用）
+
+async function attachReceiptFromArchive(id){
+  try{
+    const r = await getArchiveById(id);
+    if(!r){ alert('PDFが見つかりません'); return; }
+    const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : (r.pdfBytes || new Uint8Array());
+
+    // 領収書添付モードの状態をリセット
+    raVoucherBytes = await cleanPdfBytes(bytes);
+    raReceiptDataURL = null; raReceiptBytes = null; raReceiptMime = null;
+    _lastReceiptPdfBytes = null; _lastReceiptFilename = null;
+    _raSourceArchiveId = id;
+
+    // 画面を領収書添付モードへ切り替え
+    document.getElementById('modeSelect').style.display='none';
+    document.getElementById('archiveScreen').style.display='none';
+    document.getElementById('uploadScreen').style.display='none';
+    document.getElementById('receiptAttachScreen').style.display='flex';
+    document.getElementById('headerSub').textContent='領収書添付モード';
+
+    // STEP1（Voucher PDF）を選択済み状態にする
+    const box = document.getElementById('raVoucherBox');
+    box.classList.add('has-file');
+    const nm = document.getElementById('raVoucherName');
+    nm.textContent = '✓ ' + r.filename;
+    nm.style.display = 'block';
+
+    // STEP2（領収書）の表示をリセット
+    document.getElementById('raReceiptBox').classList.remove('has-file');
+    document.getElementById('raReceiptIcon').textContent = '🧾';
+    const prev = document.getElementById('raReceiptPreview');
+    prev.style.display = 'none'; prev.src='';
+    const rnm = document.getElementById('raReceiptName');
+    rnm.style.display = 'none'; rnm.textContent='';
+    document.getElementById('raReceiptInput').value = '';
+
+    // 保存ボタンもリセット
+    const raArchBtn = document.getElementById('raArchiveBtn');
+    if(raArchBtn){ raArchBtn.disabled = true; raArchBtn.textContent = '📂 署名済み一覧に保存'; raArchBtn.style.cssText=''; }
+
+    updateRaBtn();
+  }catch(e){
+    alert('読み込みに失敗しました: ' + e.message);
+  }
 }
 /* ── Receipt Attach Mode ── */
 let raVoucherBytes=null, raReceiptDataURL=null, raReceiptBytes=null, raReceiptMime=null;
@@ -2631,6 +2691,7 @@ function backToModeSelect(){
   archiveSelectedIds = new Set();
   updateArchiveBulkBar();
   refreshPendingBanner();
+  _raSourceArchiveId = null;
 }
 
 /* ══════════════════════════════════════════
@@ -3295,6 +3356,7 @@ function renderArchiveItem(r){
       <div class="archive-item-actions">
         <button class="archive-item-confirm${confirmed?' confirmed':''}" onclick="toggleConfirmed('${r.id}', ${confirmed})" title="${confirmed?'確認済み':'未確認'}">✅</button>
         <button class="archive-item-rename" onclick="startRenameArchive('${r.id}')" title="ファイル名を変更">✏️</button>
+        <button class="archive-item-rename" style="border-color:#f59e0b;color:#d97706;" onclick="attachReceiptFromArchive('${r.id}')" title="領収書を添付">🧾</button>
         <button class="archive-item-preview" onclick="previewArchiveItem('${r.id}')">👁</button>
         <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
       </div>
@@ -3701,11 +3763,22 @@ async function saveReceiptAttachToArchive(){
   btn.disabled = true;
   btn.textContent = '保存中...';
   try{
-    await saveToArchive(_lastReceiptPdfBytes, _lastReceiptFilename, 'receipt');
+    const newId = await saveToArchive(_lastReceiptPdfBytes, _lastReceiptFilename, 'receipt');
     btn.textContent = '✓ 保存しました';
     btn.style.background = '#dcfce7';
     btn.style.borderColor = '#16a34a';
     btn.style.color = '#15803d';
+
+    // 署名済み一覧から直接開始した場合、元のPDF（領収書添付前）を削除するか確認
+    if(newId && _raSourceArchiveId){
+      const srcId = _raSourceArchiveId;
+      _raSourceArchiveId = null;
+      if(confirm('元の署名済みPDF（領収書添付前）は不要であれば削除できます。\n\n削除しますか？\n（「キャンセル」を選ぶと両方残ります）')){
+        try{
+          await deleteArchiveIds([srcId]);
+        }catch(delErr){ console.warn('元PDF削除エラー:', delErr); }
+      }
+    }
   }catch(e){
     btn.disabled = false;
     btn.textContent = '📂 署名済み一覧に保存';
