@@ -281,9 +281,11 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-item-del:active{background:#fca5a5;}
 .archive-item-rename{padding:6px 10px;border-radius:8px;border:1.5px solid #f59e0b;background:#fff;color:#d97706;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .archive-item-rename:active{background:#fef3c7;}
-.archive-rename-form{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#fffbeb;border-top:1px solid #fde68a;}
-.archive-rename-input{flex:1;padding:6px 10px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;outline:none;}
+.archive-rename-form{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#fffbeb;border-top:1px solid #fde68a;flex-wrap:wrap;}
+.archive-rename-input{flex:1 1 140px;min-width:100px;padding:6px 10px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;outline:none;}
 .archive-rename-input:focus{border-color:#d97706;box-shadow:0 0 0 2px #fde68a;}
+.archive-rename-date{flex:0 0 140px;padding:6px 8px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;outline:none;color:#1e293b;}
+.archive-rename-date:focus{border-color:#d97706;box-shadow:0 0 0 2px #fde68a;}
 .archive-rename-save{padding:6px 14px;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:13px;font-weight:700;cursor:pointer;}
 .archive-rename-save:active{opacity:.8;}
 .archive-rename-cancel{padding:6px 12px;border-radius:8px;border:1.5px solid #d1dce8;background:#fff;color:#64748b;font-size:13px;cursor:pointer;}
@@ -425,11 +427,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.13</span>
+          <span class="version-current">v4.14</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.14</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>署名済み一覧の✏️（鉛筆）ボタンで、ファイル名に加えて日付も編集できるように変更</li>
+            <li>日付を変更すると該当の月グループに自動で移動します</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.13</span>
@@ -2725,6 +2738,18 @@ async function _patchVoucherIndexField(id, field, value){
   }catch(e){ console.warn('インデックス部分更新に失敗（無視）:', e); }
 }
 
+// インデックスの複数項目をまとめて書き換え
+async function _patchVoucherIndexFields(id, fieldsObj){
+  try{
+    const ref = await _getVoucherIndexRef();
+    const updates = {};
+    for(const key of Object.keys(fieldsObj)){
+      updates[`items.${id}.${key}`] = fieldsObj[key];
+    }
+    await ref.update(updates);
+  }catch(e){ console.warn('インデックス部分更新に失敗（無視）:', e); }
+}
+
 async function saveToArchive(pdfBytes, filename, type, customDate){
   // type: 'sign' | 'receipt' | 'upload'
   // customDate: 'YYYY-MM-DD' string (optional, for upload type)
@@ -3523,7 +3548,7 @@ function renderArchiveItem(r){
       </div>
       <div class="archive-item-actions">
         <button class="archive-item-confirm${confirmed?' confirmed':''}" onclick="toggleConfirmed('${r.id}', ${confirmed})" title="${confirmed?'確認済み':'未確認'}">✅</button>
-        <button class="archive-item-rename" onclick="startRenameArchive('${r.id}')" title="ファイル名を変更">✏️</button>
+        <button class="archive-item-rename" onclick="startRenameArchive('${r.id}')" title="ファイル名・日付を変更">✏️</button>
         <button class="archive-item-rename" style="border-color:#f59e0b;color:#d97706;" onclick="attachReceiptFromArchive('${r.id}')" title="領収書を添付">🧾</button>
         <button class="archive-item-preview" onclick="previewArchiveItem('${r.id}')">👁</button>
         <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
@@ -3531,6 +3556,7 @@ function renderArchiveItem(r){
     </div>
     <div class="archive-rename-form" id="rename_form_${r.id}" style="display:none;">
       <input class="archive-rename-input" id="rename_input_${r.id}" type="text" value="${escHtml(r.filename.replace(/\.pdf$/i,''))}" placeholder="新しいファイル名（.pdf不要）">
+      <input class="archive-rename-date" id="rename_date_${r.id}" type="date" value="${(r.savedAt||'').split('T')[0]||''}">
       <button class="archive-rename-save" onclick="saveRenameArchive('${r.id}')">保存</button>
       <button class="archive-rename-cancel" onclick="cancelRenameArchive('${r.id}')">キャンセル</button>
     </div>`;
@@ -3562,27 +3588,33 @@ function startRenameArchive(id){
 
 async function saveRenameArchive(id){
   const input = document.getElementById('rename_input_'+id);
+  const dateInput = document.getElementById('rename_date_'+id);
   if(!input) return;
   const rawName = input.value.trim();
   if(!rawName){ alert('ファイル名を入力してください'); return; }
   const newFilename = rawName.replace(/\.pdf$/i,'') + '.pdf';
+  const newDateVal = dateInput ? dateInput.value : '';
+  if(dateInput && !newDateVal){ alert('日付を入力してください'); return; }
   const saveBtn = input.closest('.archive-rename-form').querySelector('.archive-rename-save');
   if(saveBtn){ saveBtn.textContent = '保存中...'; saveBtn.disabled = true; }
   try{
     const db = await getFirestore();
-    await db.collection('vouchers').doc(id).update({ filename: newFilename });
-    _patchVoucherIndexField(id, 'filename', newFilename); // インデックスも更新（高速一覧用）
-    // ローカルキャッシュも更新
-    if(window._archiveCache){
-      const rec = window._archiveCache.find(r => r.id === id);
-      if(rec) rec.filename = newFilename;
+    const updates = { filename: newFilename };
+    const idxFields = { filename: newFilename };
+    if(newDateVal){
+      // 日付編集：時刻情報は持たせず「日付のみ」として保存する
+      updates.savedAt = newDateVal + 'T00:00:00.000Z';
+      updates.dateOnly = true;
+      idxFields.savedAt = updates.savedAt;
+      idxFields.dateOnly = true;
     }
-    // UI更新（フォームを閉じて表示名を更新）
-    const nameEl = document.querySelector(`#aitem_${id} .archive-item-name`);
-    if(nameEl) nameEl.textContent = newFilename;
+    await db.collection('vouchers').doc(id).update(updates);
+    _patchVoucherIndexFields(id, idxFields); // インデックスも更新（高速一覧用）
+    // フォームを閉じて一覧を再描画（日付変更で月のグループが変わる場合があるため）
     document.getElementById('rename_form_'+id).style.display = 'none';
+    await renderArchive();
   }catch(e){
-    alert('ファイル名の変更に失敗しました: ' + e.message);
+    alert('変更の保存に失敗しました: ' + e.message);
     if(saveBtn){ saveBtn.textContent = '保存'; saveBtn.disabled = false; }
   }
 }
