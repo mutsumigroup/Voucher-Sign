@@ -308,6 +308,16 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-ship-chip{display:inline-flex;align-items:center;gap:5px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;color:#1d4ed8;cursor:pointer;transition:background .15s;}
 .archive-ship-chip:active{background:#dbeafe;}
 .archive-ship-chip .chip-count{background:#2563eb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;}
+.archive-ship-rows{display:flex;flex-direction:column;gap:6px;}
+.archive-ship-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding:7px 10px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;}
+.archive-ship-row-name{font-size:12.5px;font-weight:800;color:#1e293b;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.archive-ship-row-cats{display:flex;flex-wrap:wrap;gap:6px;}
+.archive-ship-cat{display:inline-flex;align-items:center;border-radius:14px;padding:4px 10px;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:filter .15s;}
+.archive-ship-cat:active{filter:brightness(.95);}
+.archive-ship-cat.embark{background:#dcfce7;color:#15803d;}
+.archive-ship-cat.disembark{background:#fee2e2;color:#b91c1c;}
+.archive-ship-cat.other{background:#f1f5f9;color:#475569;}
+.archive-ship-cat.active{border-color:#2563eb;box-shadow:0 0 0 1.5px #bfdbfe;}
 .archive-empty{text-align:center;padding:40px 20px;color:#94a3b8;}
 .archive-empty-icon{font-size:40px;margin-bottom:12px;}
 .archive-empty-text{font-size:14px;font-weight:700;}
@@ -427,11 +437,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.14</span>
+          <span class="version-current">v4.15</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.15</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「船名別 件数」の表示を改善 — 月ごとに船名＋「乗船 X件」「下船 Y件」の内訳で表示</li>
+            <li>「乗船」「下船」の文字をタップすると、該当PDFが1件ならそのままプレビュー表示、複数あれば一覧を絞り込んで表示</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.14</span>
@@ -3088,7 +3109,7 @@ async function _registerPendingFiles(files, sourceId){
 // アプリ起動時に保留バナーを更新
 document.addEventListener('DOMContentLoaded', ()=>{ refreshPendingBanner(); });
 
-let _archiveShipFilter = null; // nullなら全件表示
+let _archiveShipFilter = null; // null なら全件表示。それ以外は {ship, category} （categoryは 'embark'|'disembark'|'other'|null）
 
 function extractShipName(filename){
   // ファイル名から船名を抽出：「SHIP_NAME_Category_JPY...」形式
@@ -3099,6 +3120,14 @@ function extractShipName(filename){
   const parts = filename.replace(/\.pdf$/i,'').split('_');
   if(parts.length >= 2) return parts.slice(0, Math.min(3, parts.length-1)).join(' ');
   return filename.replace(/\.pdf$/i,'');
+}
+
+// ファイル名から「乗船（Embark）」「下船（Disembark）」を判定（どちらでもなければ 'other'）
+function extractCategory(filename){
+  const name = filename.replace(/\.pdf$/i,'');
+  if(/Disembark/i.test(name)) return 'disembark';
+  if(/Embark/i.test(name)) return 'embark';
+  return 'other';
 }
 
 /* ══════════════════════════════════════════
@@ -3393,15 +3422,17 @@ async function renderArchive(){
   }
 
   // 船名サマリーを月ごとに構築
-  // 月→船名→件数 の2段マップ
+  // 月→船名→{embark, disembark, other} の2段マップ
   const byMonthShip = new Map();
   for(const r of allRecords){
     const d = new Date(r.savedAt);
     const monthKey = `${d.getFullYear()}年${d.getMonth()+1}月`;
     if(!byMonthShip.has(monthKey)) byMonthShip.set(monthKey, new Map());
     const ship = extractShipName(r.filename);
+    const cat = extractCategory(r.filename);
     const m = byMonthShip.get(monthKey);
-    m.set(ship, (m.get(ship)||0) + 1);
+    if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0});
+    m.get(ship)[cat]++;
   }
   const sortedMonthKeys = [...byMonthShip.keys()].sort((a,b)=>{
     // "2026年11月" 形式から比較
@@ -3414,17 +3445,28 @@ async function renderArchive(){
   shipSummary.style.display = 'block';
   shipBody.innerHTML = sortedMonthKeys.map(monthKey => {
     const shipMap = byMonthShip.get(monthKey);
-    const sortedShips = [...shipMap.entries()].sort((a,b)=>b[1]-a[1]);
-    const totalInMonth = [...shipMap.values()].reduce((s,v)=>s+v,0);
+    const sortedShips = [...shipMap.entries()].sort((a,b)=>{
+      const ta = a[1].embark + a[1].disembark + a[1].other;
+      const tb = b[1].embark + b[1].disembark + b[1].other;
+      return tb - ta;
+    });
+    const totalInMonth = sortedShips.reduce((s,[,c])=>s + c.embark + c.disembark + c.other, 0);
     return `
       <div class="archive-ship-month-label">${escHtml(monthKey)}（${totalInMonth}件）</div>
-      <div class="archive-ship-chips">
-        ${sortedShips.map(([ship,cnt])=>`
-          <span class="archive-ship-chip${_archiveShipFilter===ship?' active':''}"
-            onclick="filterByShip('${escHtml(ship)}')"
-            style="${_archiveShipFilter===ship?'background:#dbeafe;border-color:#2563eb;':''}">
-            🚢 ${escHtml(ship)} <span class="chip-count">${cnt}</span>
-          </span>`).join('')}
+      <div class="archive-ship-rows">
+        ${sortedShips.map(([ship,c])=>{
+          const isActiveShip = _archiveShipFilter && _archiveShipFilter.ship === ship;
+          const isActive = cat => isActiveShip && _archiveShipFilter.category === cat;
+          const tags = [];
+          if(c.embark>0) tags.push(`<span class="archive-ship-cat embark${isActive('embark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','embark')">乗船 ${c.embark}件</span>`);
+          if(c.disembark>0) tags.push(`<span class="archive-ship-cat disembark${isActive('disembark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','disembark')">下船 ${c.disembark}件</span>`);
+          if(c.other>0) tags.push(`<span class="archive-ship-cat other${isActive('other')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','other')">他 ${c.other}件</span>`);
+          return `
+          <div class="archive-ship-row">
+            <span class="archive-ship-row-name">🚢 ${escHtml(ship)}</span>
+            <span class="archive-ship-row-cats">${tags.join('')}</span>
+          </div>`;
+        }).join('')}
       </div>`;
   }).join('') + `
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
@@ -3449,9 +3491,10 @@ async function renderArchive(){
   // 各レコードに重複フラグを付与
   allRecords.forEach(r => { r._isDuplicate = r.checksum && duplicateChecksums.has(r.checksum); });
 
-  // フィルター適用
+  // フィルター適用（船名＋乗船/下船/他 のカテゴリ）
   const records = _archiveShipFilter
-    ? allRecords.filter(r => extractShipName(r.filename) === _archiveShipFilter)
+    ? allRecords.filter(r => extractShipName(r.filename) === _archiveShipFilter.ship
+        && (_archiveShipFilter.category == null || extractCategory(r.filename) === _archiveShipFilter.category))
     : allRecords;
 
   // 月別グループ化
@@ -3497,9 +3540,33 @@ async function renderArchive(){
 }
 
 async function filterByShip(ship){
-  _archiveShipFilter = ship;
+  // null を渡すと「全て表示」（フィルター解除）
+  _archiveShipFilter = ship ? { ship, category: null } : null;
   archiveSelectedIds = new Set();
   await renderArchive();
+  _keepShipSummaryOpen();
+}
+
+// 船名サマリーの「乗船 X件」「下船 Y件」をタップした時の処理
+// 該当PDFが1件だけならそのままプレビュー表示、複数あれば一覧を絞り込んで表示
+async function filterByShipCategory(ship, category){
+  try{
+    const allRecords = await getAllArchive();
+    const matches = allRecords.filter(r => extractShipName(r.filename) === ship && extractCategory(r.filename) === category);
+    if(matches.length === 1){
+      await previewArchiveItem(matches[0].id);
+      return;
+    }
+    _archiveShipFilter = { ship, category };
+    archiveSelectedIds = new Set();
+    await renderArchive();
+    _keepShipSummaryOpen();
+  }catch(e){
+    alert('絞り込みに失敗しました: ' + e.message);
+  }
+}
+
+function _keepShipSummaryOpen(){
   // フィルター後もサマリーを開いたままにする
   const body = document.getElementById('archiveShipBody');
   const arrow = document.getElementById('shipSummaryArrow');
