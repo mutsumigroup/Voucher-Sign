@@ -437,11 +437,22 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.15</span>
+          <span class="version-current">v4.16</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.16</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>バグ修正：絞り込み（乗船/下船など）した状態で「全て選択」すると、表示されていない全件まで選択されてしまい結合時にエラーになる問題を修正。絞り込み中は表示されている分だけが選択されるように変更</li>
+            <li>結合したPDFが大きすぎて保存できない場合に、原因不明のエラーではなく「PDFのサイズが大きすぎるため保存できません」とわかりやすく表示するように改善（この場合、ダウンロードは行われますが一覧への自動保存と結合元の削除は行われません）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.15</span>
@@ -2806,13 +2817,23 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
     } else {
       savedAt = new Date().toISOString();
     }
+    const pdfBase64 = uint8ToBase64(bytes);
+
+    // ── Firestoreは1ドキュメントあたり約1MBまでという上限があるため、
+    //    それを超えそうな場合は分かりやすいエラーにして保存前に止める ──
+    const approxDocBytes = pdfBase64.length + filename.length + 300;
+    if(approxDocBytes > 950000){
+      const mb = (bytes.length / 1024 / 1024).toFixed(1);
+      throw new Error(`PDFのサイズが大きすぎるため保存できません（約${mb}MB）。ページ数や結合する枚数を減らしてから、もう一度お試しください。`);
+    }
+
     const record = {
       filename,
       type,
       savedAt,
       checksum,  // 重複検知用チェックサム
       dateOnly: !!customDate,  // 日付のみフラグ
-      pdfBase64: uint8ToBase64(bytes)
+      pdfBase64
     };
     const ref = await db.collection('vouchers').add(record);
     // 軽量インデックスにも反映（一覧表示の高速化用）
@@ -3110,6 +3131,15 @@ async function _registerPendingFiles(files, sourceId){
 document.addEventListener('DOMContentLoaded', ()=>{ refreshPendingBanner(); });
 
 let _archiveShipFilter = null; // null なら全件表示。それ以外は {ship, category} （categoryは 'embark'|'disembark'|'other'|null）
+
+// 現在のフィルター（船名別件数の絞り込み）を records に適用する共通処理
+// ※ 一覧表示だけでなく「全て選択」にも必ずこれを使い、表示されていない件まで選択しないようにする
+function _applyShipFilter(records){
+  return _archiveShipFilter
+    ? records.filter(r => extractShipName(r.filename) === _archiveShipFilter.ship
+        && (_archiveShipFilter.category == null || extractCategory(r.filename) === _archiveShipFilter.category))
+    : records;
+}
 
 function extractShipName(filename){
   // ファイル名から船名を抽出：「SHIP_NAME_Category_JPY...」形式
@@ -3492,10 +3522,7 @@ async function renderArchive(){
   allRecords.forEach(r => { r._isDuplicate = r.checksum && duplicateChecksums.has(r.checksum); });
 
   // フィルター適用（船名＋乗船/下船/他 のカテゴリ）
-  const records = _archiveShipFilter
-    ? allRecords.filter(r => extractShipName(r.filename) === _archiveShipFilter.ship
-        && (_archiveShipFilter.category == null || extractCategory(r.filename) === _archiveShipFilter.category))
-    : allRecords;
+  const records = _applyShipFilter(allRecords);
 
   // 月別グループ化
   const byMonth = new Map();
@@ -3714,7 +3741,8 @@ function updateArchiveBulkBar(){
 }
 
 async function toggleSelectAll(){
-  const records = await getAllArchive();
+  // フィルターで絞り込んでいる場合は、表示中の件だけを対象に全選択する
+  const records = _applyShipFilter(await getAllArchive());
   if(archiveSelectedIds.size === records.length){
     // 全解除
     archiveSelectedIds = new Set();
