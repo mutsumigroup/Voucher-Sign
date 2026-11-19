@@ -241,20 +241,27 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-month-arrow.open{transform:rotate(180deg);}
 .archive-month-items{display:none;border-top:1px solid var(--border);}
 .archive-month-items.open{display:block;}
-.archive-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f1f5f9;-webkit-user-select:none;user-select:none;}
+.archive-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f1f5f9;-webkit-user-select:none;user-select:none;flex-wrap:wrap;}
 .archive-item:last-child{border-bottom:none;}
 .archive-item-check{width:22px;height:22px;border:2px solid #d1dce8;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,border-color .15s;}
 .archive-item-check.checked{background:#7c3aed;border-color:#7c3aed;}
 .archive-item-check.checked::after{content:'✓';color:#fff;font-size:13px;font-weight:900;}
-.archive-item-info{flex:1;min-width:0;cursor:pointer;}
+.archive-item-info{flex:1 1 140px;min-width:0;cursor:pointer;}
 .archive-item-name{font-size:13px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.archive-item-meta{font-size:11px;color:#64748b;margin-top:2px;display:flex;align-items:center;gap:6px;}
-.archive-item-type{padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;}
+.archive-item-meta{font-size:11px;color:#64748b;margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap;}
+.archive-item-type{padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;}
 .archive-item-type.sign{background:#dbeafe;color:#1d4ed8;}
 .archive-item-type.receipt{background:#fef3c7;color:#92400e;}
 .archive-item-type.upload{background:#e0f2fe;color:#0369a1;}
 .archive-item.confirmed{background:#f0fdf4;}
-.archive-item-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.archive-item-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:nowrap;}
+@media (max-width:480px){
+  .archive-item{gap:8px;padding:12px;}
+  .archive-item-info{flex-basis:100%;order:1;}
+  .archive-item-check{order:0;}
+  .archive-item-actions{order:2;flex-basis:100%;justify-content:flex-end;margin-top:4px;}
+  .archive-item-confirm,.archive-item-rename,.archive-item-preview,.archive-item-del{padding:6px 8px;font-size:12px;}
+}
 .archive-item-confirm{padding:6px 10px;border-radius:8px;border:1.5px solid #d1dce8;background:#fff;color:#d1dce8;font-size:14px;cursor:pointer;white-space:nowrap;transition:all .15s;}
 .archive-item-confirm.confirmed{border-color:#16a34a;background:#dcfce7;filter:none;}
 .archive-item-confirm:not(.confirmed){filter:grayscale(1);opacity:0.4;}
@@ -417,11 +424,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.9</span>
+          <span class="version-current">v4.10</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.10</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>バグ修正：保留中のPDFをサインしてダウンロードしても「保留中」が消えない問題を修正（ダウンロード完了時にも保留解除されるよう変更）</li>
+            <li>バグ修正：スマホ画面で署名済み一覧の表示が崩れる問題を修正（種別バッジの縦折り返し・ボタンの詰まりを解消）</li>
+            <li>480px以下の画面ではアクションボタン群がファイル名の下に折り返されるレイアウトに変更</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.9</span>
@@ -2242,6 +2261,12 @@ function _dlFinish(out, dlName){
   _lastSignedFilename = dlName;
   const archBtn = document.getElementById('saveToArchiveBtn');
   if(archBtn){ archBtn.disabled=false; archBtn.textContent='📂 署名済み一覧に保存'; archBtn.style.cssText=''; }
+  // サインが完了しダウンロードされた時点で「保留中」は解消したとみなし保留レコードを削除
+  if(_currentPendingId){
+    const pid = _currentPendingId;
+    _currentPendingId = null;
+    deletePendingPdf(pid).then(()=>refreshPendingBanner()).catch(e=>console.warn('保留削除エラー（無視）:', e));
+  }
   const txt=document.getElementById('dlBtnText');
   const btn=document.getElementById('dlBtn');
   txt.textContent='ダウンロード完了 ✓';
