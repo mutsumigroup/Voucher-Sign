@@ -425,11 +425,21 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.12</span>
+          <span class="version-current">v4.13</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.13</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「1つに結合」で保存される結合PDFの保存日を、結合を実行した日（今日の日付）にするよう変更</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.12</span>
@@ -3750,9 +3760,12 @@ async function mergeAndDownloadSelected(){
     const mergedFilename = `${firstName}_他${ids.length}件_merged.pdf`;
 
     // ── 結合したPDFを自動で「署名済み一覧」に保存（再アップロード不要にする） ──
+    // 保存日は「結合した日（今日）」をそのまま使う（時刻は付けず日付のみ）
+    const now = new Date();
+    const mergedDateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     let newId = null;
     try{
-      newId = await saveToArchive(out, mergedFilename, 'merged');
+      newId = await saveToArchive(out, mergedFilename, 'merged', mergedDateStr);
     }catch(saveErr){
       console.error('結合PDFの保存に失敗:', saveErr);
       alert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
