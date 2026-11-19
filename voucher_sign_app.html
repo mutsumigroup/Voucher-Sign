@@ -424,11 +424,24 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.10</span>
+          <span class="version-current">v4.11</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.11</span>
+            <span class="ver-date">2026/11/19</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>高速化：「署名済み一覧」の読み込みが遅い問題を改善 — これまで一覧表示のたびに全件のPDF本体データまで読み込んでいたのを、ファイル名・日付・種別などの軽量情報だけを読む方式に変更</li>
+            <li>件数が多くなるほど効果が大きく、PDF本体は「プレビュー」「ダウンロード」「Voucherチェック」など実際に必要な時だけ読み込む</li>
+            <li>保存時の重複チェックも軽量化（PDF本体を読まずに判定）</li>
+            <li>初回表示時のみ一度だけ全件を読み込んでインデックスを作成（以降は高速）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.10</span>
@@ -2601,6 +2614,94 @@ function _pdfChecksum(bytes){
   return `${size}:${head}:${tail}`;
 }
 
+/* ══════════════════════════════════════════
+   軽量インデックス（署名済み一覧の高速読込用）
+   サインアプリのPDFはFirestoreに base64 でそのまま保存しているため、
+   件数が増えると一覧表示のたびに全PDFデータを読み込んでしまい重くなる。
+   そこで filename/type/savedAt など「一覧表示に必要な軽量情報だけ」を
+   1つの小さなドキュメントにまとめてキャッシュし、一覧表示はそこから読む。
+   PDF本体（pdfBase64）が必要な操作（プレビュー・ダウンロード・Voucherチェック等）は
+   従来通り個別に取得する。
+══════════════════════════════════════════ */
+const VOUCHER_INDEX_COL = 'app_meta';
+const VOUCHER_INDEX_DOC = 'vouchers_index';
+
+function _voucherIndexMeta(data){
+  return {
+    filename: data.filename || '',
+    type: data.type || 'sign',
+    savedAt: data.savedAt || new Date().toISOString(),
+    dateOnly: !!data.dateOnly,
+    checksum: data.checksum || null,
+    confirmed: !!data.confirmed
+  };
+}
+
+async function _getVoucherIndexRef(){
+  const db = await getFirestore();
+  return db.collection(VOUCHER_INDEX_COL).doc(VOUCHER_INDEX_DOC);
+}
+
+// インデックスを取得。存在しない場合は一度だけ全件スキャンして構築する
+async function _getVoucherIndex(){
+  try{
+    const ref = await _getVoucherIndexRef();
+    const snap = await ref.get();
+    if(snap.exists && snap.data() && snap.data().items){
+      return snap.data().items;
+    }
+    // ── 初回のみ：全件スキャンしてインデックスを構築（以降は高速化される） ──
+    const db = await getFirestore();
+    const all = await db.collection('vouchers').orderBy('savedAt','desc').get();
+    const items = {};
+    all.docs.forEach(d=>{
+      const data = d.data();
+      if(data.type === 'pending') return; // 保留中は一覧に含めない
+      items[d.id] = _voucherIndexMeta(data);
+    });
+    try{ await ref.set({ items, rebuiltAt: new Date().toISOString() }); }
+    catch(saveErr){ console.warn('インデックス構築の保存に失敗（無視）:', saveErr); }
+    return items;
+  }catch(e){
+    console.error('_getVoucherIndex error:', e);
+    return {};
+  }
+}
+
+// インデックスに1件を追加・更新
+async function _updateVoucherIndexEntry(id, meta){
+  try{
+    const ref = await _getVoucherIndexRef();
+    try{
+      await ref.update({ [`items.${id}`]: meta });
+    }catch(updateErr){
+      // ドキュメントがまだ存在しない場合は新規作成
+      await ref.set({ items: { [id]: meta } }, { merge: true });
+    }
+  }catch(e){ console.warn('インデックス更新に失敗（無視）:', e); }
+}
+
+// インデックスから複数件を削除
+async function _removeVoucherIndexEntries(ids){
+  if(!ids || ids.length === 0) return;
+  try{
+    const ref = await _getVoucherIndexRef();
+    const updates = {};
+    for(const id of ids){
+      updates[`items.${id}`] = firebase.firestore.FieldValue.delete();
+    }
+    await ref.update(updates);
+  }catch(e){ console.warn('インデックス削除に失敗（無視）:', e); }
+}
+
+// インデックスの1項目だけ書き換え（ファイル名変更・確認状態トグルなど）
+async function _patchVoucherIndexField(id, field, value){
+  try{
+    const ref = await _getVoucherIndexRef();
+    await ref.update({ [`items.${id}.${field}`]: value });
+  }catch(e){ console.warn('インデックス部分更新に失敗（無視）:', e); }
+}
+
 async function saveToArchive(pdfBytes, filename, type, customDate){
   // type: 'sign' | 'receipt' | 'upload'
   // customDate: 'YYYY-MM-DD' string (optional, for upload type)
@@ -2609,14 +2710,14 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
     const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
 
     // ── 重複チェック（同じPDFが既に保存されていないか確認） ──
+    // ※ 軽量インデックスのみを見るため、PDF本体を読み込まず高速に判定できる
     const checksum = _pdfChecksum(bytes);
     try{
-      const existing = await db.collection('vouchers')
-        .where('checksum','==',checksum).limit(1).get();
-      if(!existing.empty){
-        const dup = existing.docs[0].data();
-        const dupDate = dup.savedAt ? new Date(dup.savedAt).toLocaleDateString('ja-JP') : '不明';
-        const dupName = dup.filename || '不明';
+      const idx = await _getVoucherIndex();
+      const dupEntry = Object.values(idx).find(it => it.checksum === checksum);
+      if(dupEntry){
+        const dupDate = dupEntry.savedAt ? new Date(dupEntry.savedAt).toLocaleDateString('ja-JP') : '不明';
+        const dupName = dupEntry.filename || '不明';
         const proceed = confirm(
           `⚠️ このPDFは既に保存されている可能性があります。\n\n` +
           `既存ファイル名: ${dupName}\n保存日: ${dupDate}\n\n` +
@@ -2645,6 +2746,8 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
       pdfBase64: uint8ToBase64(bytes)
     };
     const ref = await db.collection('vouchers').add(record);
+    // 軽量インデックスにも反映（一覧表示の高速化用）
+    await _updateVoucherIndexEntry(ref.id, _voucherIndexMeta(record));
     return ref.id;
   }catch(e){
     console.error('saveToArchive error:', e);
@@ -2652,14 +2755,28 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
   }
 }
 
+// 署名済み一覧の表示用（高速・軽量）：PDF本体は含まない
 async function getAllArchive(){
+  try{
+    const items = await _getVoucherIndex();
+    const list = Object.keys(items).map(id => ({ id, ...items[id] }));
+    list.sort((a,b)=> new Date(b.savedAt) - new Date(a.savedAt));
+    return list;
+  }catch(e){
+    console.error('getAllArchive error:', e);
+    return [];
+  }
+}
+
+// Voucherチェックなど「PDF本体の内容」が必要な処理専用：全件フル取得（重い）
+async function getAllArchiveFull(){
   try{
     const db = await getFirestore();
     const snap = await db.collection('vouchers').orderBy('savedAt','desc').get();
     // 「保留中（pending）」のレコードは署名済み一覧には表示しない
     return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.type !== 'pending');
   }catch(e){
-    console.error('getAllArchive error:', e);
+    console.error('getAllArchiveFull error:', e);
     return [];
   }
 }
@@ -2684,6 +2801,8 @@ async function deleteArchiveIds(ids){
       batch.delete(db.collection('vouchers').doc(id));
     }
     await batch.commit();
+    // 軽量インデックスからも削除
+    await _removeVoucherIndexEntries(ids);
   }catch(e){
     console.error('deleteArchiveIds error:', e);
     throw e;
@@ -3045,7 +3164,8 @@ async function runVoucherCheck(files){
     }
 
     // ② サインアプリ保存済みPDF（pending以外）を取得・解析
-    const archiveRecords = await getAllArchive();
+    // ※ PDF本体の内容比較が必要なため、ここだけはフル取得を使う
+    const archiveRecords = await getAllArchiveFull();
     const archiveParsed = [];
     for(let i=0;i<archiveRecords.length;i++){
       progressText.textContent = `保存済みPDFと照合中... (${i+1}/${archiveRecords.length})`;
@@ -3428,6 +3548,7 @@ async function saveRenameArchive(id){
   try{
     const db = await getFirestore();
     await db.collection('vouchers').doc(id).update({ filename: newFilename });
+    _patchVoucherIndexField(id, 'filename', newFilename); // インデックスも更新（高速一覧用）
     // ローカルキャッシュも更新
     if(window._archiveCache){
       const rec = window._archiveCache.find(r => r.id === id);
@@ -3639,6 +3760,7 @@ async function toggleConfirmed(id, currentState){
   try{
     const db = await getFirestore();
     db.collection('vouchers').doc(id).update({ confirmed: next });
+    _patchVoucherIndexField(id, 'confirmed', next); // インデックスも更新（高速一覧用）
   }catch(e){
     // 失敗したらUIを元に戻す
     if(item && btn){
