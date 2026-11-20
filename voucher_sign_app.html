@@ -275,8 +275,27 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 #pdfPreviewHeader{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e1b4b;flex-shrink:0;gap:8px;}
 #pdfPreviewTitle{color:#fff;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
 #pdfPreviewDlBtn{padding:6px 14px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
+#pdfPreviewEditBtn{padding:6px 12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewCloseBtn{padding:6px 12px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewBody{flex:1;overflow:hidden;display:flex;align-items:stretch;}
+/* ページ編集モーダル */
+#pageEditorOverlay{visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:2147483647;display:flex;flex-direction:column;align-items:stretch;transition:opacity 0.15s;}
+#pageEditorOverlay.open{visibility:visible;opacity:1;pointer-events:auto;}
+#pageEditorHeader{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e1b4b;flex-shrink:0;gap:8px;}
+#pageEditorTitle{color:#fff;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+#pageEditorCloseBtn{padding:6px 12px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0;}
+#pageEditorBody{flex:1;overflow-y:auto;background:#0f172a;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;align-content:start;}
+.page-editor-thumb{position:relative;background:#fff;border-radius:8px;overflow:hidden;border:3px solid transparent;cursor:pointer;-webkit-user-select:none;user-select:none;}
+.page-editor-thumb.marked{border-color:#ef4444;}
+.page-editor-thumb canvas{display:block;width:100%;height:auto;}
+.page-editor-thumb-label{position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;}
+.page-editor-thumb-mark{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;font-size:14px;}
+.page-editor-thumb.marked .page-editor-thumb-mark{background:#ef4444;color:#fff;}
+.page-editor-thumb.marked::after{content:'';position:absolute;inset:0;background:rgba(239,68,68,0.25);}
+#pageEditorFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:#1e1b4b;flex-shrink:0;}
+#pageEditorFooterText{color:#cbd5e1;font-size:12px;flex:1;}
+#pageEditorSaveBtn{padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
+#pageEditorSaveBtn:disabled{background:#475569;cursor:default;}
 .archive-item-del{padding:6px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .archive-item-del:active{background:#fca5a5;}
 .archive-item-rename{padding:6px 10px;border-radius:8px;border:1.5px solid #f59e0b;background:#fff;color:#d97706;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
@@ -437,11 +456,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.17</span>
+          <span class="version-current">v4.18</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.18</span>
+            <span class="ver-date">2026/11/20</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「1つに結合」で、選択した順番に関わらず voucher（領収書以外）が先頭、領収書添付が最後になるよう自動で並べ替えてから結合するように変更</li>
+            <li>新機能：署名済み一覧のプレビュー画面に「🗑 ページ編集」ボタンを追加 — 複数ページのPDFからページを選んで個別に削除できるように</li>
+            <li>結合してみて不要なページが混ざっていた場合も、結合をやり直さずそのページだけ削除できます</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.17</span>
@@ -3437,6 +3468,7 @@ function toggleVcheckMatched(){
 async function previewVcheckUploaded(idx){
   const item = _vcheckUploadedFiles[idx];
   if(!item) return;
+  _previewArchiveId = null; // サインアプリ保存済みではないため「ページ編集」は出さない
   _openPdfPreviewFromBytes(item.bytes, item.filename);
 }
 
@@ -3784,12 +3816,14 @@ async function downloadArchiveItem(id){
 }
 
 let _previewBlobUrl = null;
+let _previewArchiveId = null; // プレビュー中のレコードID（署名済み一覧のものなら「ページ編集」を使えるようにする）
 
 async function previewArchiveItem(id){
   try{
     const r = await getArchiveById(id);
     if(!r) return;
     const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : (r.pdfBytes || new Uint8Array());
+    _previewArchiveId = id;
     _openPdfPreviewFromBytes(bytes, r.filename);
   }catch(e){
     alert('プレビューに失敗しました: ' + e.message);
@@ -3807,6 +3841,8 @@ function _openPdfPreviewFromBytes(bytes, filename){
 
     const overlay = document.getElementById('pdfPreviewOverlay');
     document.getElementById('pdfPreviewTitle').textContent = filename;
+    const editBtn = document.getElementById('pdfPreviewEditBtn');
+    if(editBtn) editBtn.style.display = _previewArchiveId ? 'inline-block' : 'none';
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
 
@@ -3843,6 +3879,7 @@ function closePdfPreview(){
   document.getElementById('pdfPreviewOverlay').classList.remove('open');
   document.getElementById('pdfPreviewBody').innerHTML = '';
   if(_previewBlobUrl){ URL.revokeObjectURL(_previewBlobUrl); _previewBlobUrl = null; }
+  _previewArchiveId = null;
 }
 
 function pdfPreviewDownload(){
@@ -3852,6 +3889,156 @@ function pdfPreviewDownload(){
   a.href = _previewBlobUrl;
   a.download = title.endsWith('.pdf') ? title : title + '.pdf';
   a.click();
+}
+
+/* ══════════════════════════════════════════
+   ページ編集機能（結合などで複数ページになったPDFから
+   不要なページだけを選んで削除する）
+══════════════════════════════════════════ */
+let _pageEditor = null; // { id, filename, bytes, pageCount, markedPages:Set }
+
+async function openPagesEditor(){
+  if(!_previewArchiveId) return;
+  const id = _previewArchiveId;
+  const body = document.getElementById('pageEditorBody');
+  const saveBtn = document.getElementById('pageEditorSaveBtn');
+  const footerText = document.getElementById('pageEditorFooterText');
+  const overlay = document.getElementById('pageEditorOverlay');
+  const titleEl = document.getElementById('pageEditorTitle');
+
+  try{
+    const r = await getArchiveById(id);
+    if(!r){ alert('データが見つかりませんでした'); return; }
+    const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
+    if(!bytes.length){ alert('PDFデータが見つかりませんでした'); return; }
+
+    titleEl.textContent = 'ページを選んで削除：' + r.filename;
+    body.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">読み込み中...</div>';
+    saveBtn.disabled = true;
+    footerText.textContent = '削除したいページをタップして選択してください';
+    overlay.classList.add('open');
+
+    const pdfjsDoc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
+    const pageCount = pdfjsDoc.numPages;
+
+    _pageEditor = { id, filename: r.filename, bytes, pageCount, markedPages: new Set() };
+
+    if(pageCount <= 1){
+      body.innerHTML = '<div style="color:#fca5a5;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">このPDFは1ページのみのため、ページ削除はできません。</div>';
+      return;
+    }
+
+    body.innerHTML = '';
+    for(let i=1;i<=pageCount;i++){
+      const page = await pdfjsDoc.getPage(i);
+      const vp1 = page.getViewport({scale:1});
+      const scale = 220 / vp1.width;
+      const vp = page.getViewport({scale});
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width;
+      canvas.height = vp.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+
+      const thumb = document.createElement('div');
+      thumb.className = 'page-editor-thumb';
+      thumb.id = 'pgthumb_' + i;
+      thumb.onclick = () => togglePageMark(i);
+      thumb.appendChild(canvas);
+      const label = document.createElement('div');
+      label.className = 'page-editor-thumb-label';
+      label.textContent = `${i} / ${pageCount}`;
+      thumb.appendChild(label);
+      const mark = document.createElement('div');
+      mark.className = 'page-editor-thumb-mark';
+      mark.textContent = '🗑';
+      thumb.appendChild(mark);
+      body.appendChild(thumb);
+    }
+  }catch(e){
+    console.error('ページ編集の読み込みに失敗:', e);
+    body.innerHTML = `<div style="color:#fca5a5;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">読み込みに失敗しました: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function togglePageMark(pageNum){
+  if(!_pageEditor) return;
+  const { markedPages, pageCount } = _pageEditor;
+  if(markedPages.has(pageNum)) markedPages.delete(pageNum);
+  else markedPages.add(pageNum);
+
+  const thumb = document.getElementById('pgthumb_' + pageNum);
+  if(thumb) thumb.classList.toggle('marked', markedPages.has(pageNum));
+
+  const saveBtn = document.getElementById('pageEditorSaveBtn');
+  const footerText = document.getElementById('pageEditorFooterText');
+  const n = markedPages.size;
+  if(n === 0){
+    saveBtn.disabled = true;
+    footerText.textContent = '削除したいページをタップして選択してください';
+  } else if(n >= pageCount){
+    // 全ページ削除は不可（PDFが空になってしまうため）
+    saveBtn.disabled = true;
+    footerText.textContent = '⚠️ 全ページは削除できません（最低1ページは残してください）';
+  } else {
+    saveBtn.disabled = false;
+    footerText.textContent = `${n}ページを削除します（残り${pageCount - n}ページ）`;
+  }
+}
+
+async function savePagesEditor(){
+  if(!_pageEditor || _pageEditor.markedPages.size === 0) return;
+  const { id, filename, bytes, pageCount, markedPages } = _pageEditor;
+  if(markedPages.size >= pageCount){
+    alert('全ページは削除できません');
+    return;
+  }
+  if(!confirm(`${markedPages.size}ページを削除します。元に戻せません。よろしいですか？`)) return;
+
+  const saveBtn = document.getElementById('pageEditorSaveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = '削除中...';
+
+  try{
+    const srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true, throwOnInvalidObject:false});
+    // 残すページ番号（1始まり）を決定し、新しいPDFを作成
+    const keepIndexes = [];
+    for(let i=0;i<pageCount;i++){
+      if(!markedPages.has(i+1)) keepIndexes.push(i);
+    }
+    const newDoc = await PDFLib.PDFDocument.create();
+    const copiedPages = await newDoc.copyPages(srcDoc, keepIndexes);
+    copiedPages.forEach(p => newDoc.addPage(p));
+    const out = await newDoc.save();
+    const outBytes = new Uint8Array(out);
+
+    // Firestore上の該当レコードを上書き保存（チェックサム・インデックスも更新）
+    const newChecksum = _pdfChecksum(outBytes);
+    const newPdfBase64 = uint8ToBase64(outBytes);
+    const db = await getFirestore();
+    await db.collection('vouchers').doc(id).update({
+      pdfBase64: newPdfBase64,
+      checksum: newChecksum
+    });
+    await _patchVoucherIndexFields(id, { checksum: newChecksum });
+
+    alert(`${markedPages.size}ページを削除しました（残り${pageCount - markedPages.size}ページ）`);
+    closePagesEditor();
+    closePdfPreview();
+    await renderArchive();
+  }catch(e){
+    console.error('ページ削除に失敗:', e);
+    alert('ページの削除に失敗しました: ' + e.message);
+    saveBtn.disabled = false;
+    saveBtn.textContent = '選択したページを削除';
+  }
+}
+
+function closePagesEditor(){
+  document.getElementById('pageEditorOverlay').classList.remove('open');
+  document.getElementById('pageEditorBody').innerHTML = '';
+  document.getElementById('pageEditorSaveBtn').disabled = true;
+  document.getElementById('pageEditorSaveBtn').textContent = '選択したページを削除';
+  _pageEditor = null;
 }
 
 async function downloadSelectedArchive(){
@@ -3875,9 +4062,17 @@ async function mergeAndDownloadSelected(){
     let firstRecord = null;
     const mergedIds = [];    // 実際にページを結合できたレコードのID（削除してよいもの）
     const failedNames = [];  // 読み込み・結合に失敗したファイル名（一覧から残す）
+
+    // ── 結合順を決定：領収書添付（type==='receipt'）は常に最後、それ以外（voucher等）が先 ──
+    const recordsToMerge = [];
     for(const id of ids){
       const r = await getArchiveById(id);
-      if(!r) continue;
+      if(r) recordsToMerge.push(r);
+    }
+    recordsToMerge.sort((a,b) => (a.type==='receipt'?1:0) - (b.type==='receipt'?1:0));
+
+    for(const r of recordsToMerge){
+      const id = r.id;
       if(!firstRecord) firstRecord = r;
       const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
       if(!bytes.length){ failedNames.push(r.filename); continue; }
@@ -4162,10 +4357,24 @@ refreshPendingBanner();
 <div id="pdfPreviewOverlay">
   <div id="pdfPreviewHeader">
     <div id="pdfPreviewTitle"></div>
+    <button id="pdfPreviewEditBtn" onclick="openPagesEditor()" style="display:none;">🗑 ページ編集</button>
     <button id="pdfPreviewDlBtn" onclick="pdfPreviewDownload()">⬇ DL</button>
     <button id="pdfPreviewCloseBtn" onclick="closePdfPreview()">✕</button>
   </div>
   <div id="pdfPreviewBody"></div>
+</div>
+
+<!-- ページ編集モーダル（複数ページのPDFから不要なページだけを削除） -->
+<div id="pageEditorOverlay">
+  <div id="pageEditorHeader">
+    <div id="pageEditorTitle">ページを選んで削除</div>
+    <button id="pageEditorCloseBtn" onclick="closePagesEditor()">✕</button>
+  </div>
+  <div id="pageEditorBody"></div>
+  <div id="pageEditorFooter">
+    <div id="pageEditorFooterText">削除したいページをタップして選択してください</div>
+    <button id="pageEditorSaveBtn" onclick="savePagesEditor()" disabled>選択したページを削除</button>
+  </div>
 </div>
 
 <!-- 日付選択モーダル: bodyの最後、全要素より前面 -->
