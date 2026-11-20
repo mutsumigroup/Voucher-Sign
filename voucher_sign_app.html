@@ -437,11 +437,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.16</span>
+          <span class="version-current">v4.17</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.17</span>
+            <span class="ver-date">2026/11/20</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>バグ修正：「1つに結合」で、一部のPDFが読み込みに失敗すると無言でスキップされ、選択した枚数より少ないページ数で結合されてしまう問題を修正</li>
+            <li>読み込みに失敗したPDFは、XRef修復処理を試した上で、それでも失敗した場合ははっきり警告を表示するように変更（どのファイルが結合できなかったか分かる）</li>
+            <li>結合できなかったPDFは誤って削除されないよう、一覧に残すように変更（実際に結合できた分だけを削除）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.16</span>
@@ -3861,30 +3873,59 @@ async function mergeAndDownloadSelected(){
     const ids = [...archiveSelectedIds];
     const mergedDoc = await PDFLib.PDFDocument.create();
     let firstRecord = null;
+    const mergedIds = [];    // 実際にページを結合できたレコードのID（削除してよいもの）
+    const failedNames = [];  // 読み込み・結合に失敗したファイル名（一覧から残す）
     for(const id of ids){
       const r = await getArchiveById(id);
       if(!r) continue;
       if(!firstRecord) firstRecord = r;
       const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
-      if(!bytes.length) continue;
+      if(!bytes.length){ failedNames.push(r.filename); continue; }
+
+      // ── PDF読み込み：まず通常読み込み、失敗したらXRef修復（cleanPdfBytes）してから再試行 ──
+      let srcDoc = null;
       try{
-        const srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true});
+        srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true, throwOnInvalidObject:false});
+      }catch(e1){
+        console.warn('通常読み込みに失敗。修復を試みます:', r.filename, e1);
+        try{
+          const cleaned = await cleanPdfBytes(bytes);
+          srcDoc = await PDFLib.PDFDocument.load(cleaned, {ignoreEncryption:true, throwOnInvalidObject:false});
+        }catch(e2){
+          console.warn('結合スキップ（読み込み失敗）:', r.filename, e2);
+          failedNames.push(r.filename);
+          continue;
+        }
+      }
+
+      try{
         const pageCount = srcDoc.getPageCount();
         for(let i=0;i<pageCount;i++){
           const [copied] = await mergedDoc.copyPages(srcDoc, [i]);
           mergedDoc.addPage(copied);
         }
-      }catch(e){ console.warn('結合スキップ:', r.filename, e); }
+        mergedIds.push(id);
+      }catch(e){
+        console.warn('結合スキップ（ページコピー失敗）:', r.filename, e);
+        failedNames.push(r.filename);
+      }
     }
+
     if(mergedDoc.getPageCount() === 0){
-      alert('結合できるページがありませんでした');
+      alert('結合できるページがありませんでした' + (failedNames.length ? `\n\n失敗したファイル:\n${failedNames.join('\n')}` : ''));
       return;
     }
+
+    // ── 一部のPDFが結合できなかった場合は、保存・ダウンロードの前に必ず知らせる ──
+    if(failedNames.length > 0){
+      alert(`⚠️ 以下のPDFは読み込みに失敗したため、結合結果に含まれていません：\n\n${failedNames.join('\n')}\n\nこれらは一覧に残したままにします。`);
+    }
+
     const out = await mergedDoc.save();
 
-    // ファイル名：選択件数＋最初のファイル名ベース
+    // ファイル名：実際に結合できた件数＋最初のファイル名ベース
     const firstName = (firstRecord ? firstRecord.filename : 'merged').replace(/\.pdf$/i,'');
-    const mergedFilename = `${firstName}_他${ids.length}件_merged.pdf`;
+    const mergedFilename = `${firstName}_他${mergedIds.length}件_merged.pdf`;
 
     // ── 結合したPDFを自動で「署名済み一覧」に保存（再アップロード不要にする） ──
     // 保存日は「結合した日（今日）」をそのまま使う（時刻は付けず日付のみ）
@@ -3906,9 +3947,10 @@ async function mergeAndDownloadSelected(){
     a.href = url; a.click();
     URL.revokeObjectURL(url);
 
-    // ── 保存に成功した場合のみ、結合元のPDFは一覧から削除（重複を残さない） ──
-    if(newId){
-      try{ await deleteArchiveIds(ids); }
+    // ── 保存に成功した場合のみ、実際に結合できたPDFだけを一覧から削除する ──
+    // （読み込みに失敗して結合に含まれなかったPDFは、誤って消さないよう一覧に残す）
+    if(newId && mergedIds.length > 0){
+      try{ await deleteArchiveIds(mergedIds); }
       catch(delErr){ console.warn('結合元PDFの削除に失敗（無視）:', delErr); }
     }
 
