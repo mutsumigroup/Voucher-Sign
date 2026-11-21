@@ -464,11 +464,34 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.22</span>
+          <span class="version-current">v4.24</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.24</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>サイン完了後も「保留中」が残る問題を修正（どの保存方法でも確実に削除）</li>
+            <li>すでに残っている完了済みの保留は自動で整理されます</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.23</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合でページが欠ける不具合の対策：各PDFの正しいページ数を数え、結合結果と照合しながら結合（合わない場合は修復読み込み→最終手段としてページを画像化して取り込み）</li>
+            <li>結合結果のページ数が合計と一致しない場合は、保存も元PDF削除もせず中止して警告</li>
+            <li>結合後の元PDFの削除を確認し、残っていれば再削除。保存されなかった場合は元PDFを残すことを明示</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.22</span>
@@ -2439,11 +2462,7 @@ function _dlFinish(out, dlName){
   const archBtn = document.getElementById('saveToArchiveBtn');
   if(archBtn){ archBtn.disabled=false; archBtn.textContent='📂 署名済み一覧に保存'; archBtn.style.cssText=''; }
   // サインが完了しダウンロードされた時点で「保留中」は解消したとみなし保留レコードを削除
-  if(_currentPendingId){
-    const pid = _currentPendingId;
-    _currentPendingId = null;
-    deletePendingPdf(pid).then(()=>refreshPendingBanner()).catch(e=>console.warn('保留削除エラー（無視）:', e));
-  }
+  _finishPending();
   const txt=document.getElementById('dlBtnText');
   const btn=document.getElementById('dlBtn');
   txt.textContent='ダウンロード完了 ✓';
@@ -3003,6 +3022,7 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
     await docRef.set(record);
     // 軽量インデックスにも反映（一覧表示の高速化用）
     await _updateVoucherIndexEntry(docRef.id, _voucherIndexMeta(record));
+    if(type==='sign' || type==='receipt'){ try{ await _finishPending(); }catch(e){} }
     return docRef.id;
   }catch(e){
     console.error('saveToArchive error:', e);
@@ -3162,15 +3182,43 @@ async function deletePendingPdf(id){
   try{
     const db = await getFirestore();
     await db.collection('vouchers').doc(id).delete();
+    return true;
   }catch(e){
     console.error('deletePendingPdf error:', e);
+    return false;
   }
+}
+
+// 署名完了時：処理中の保留レコードを確実に削除し、バナー/リストを更新
+async function _finishPending(){
+  let pid = _currentPendingId;
+  try{ if(!pid) pid = localStorage.getItem('voucher_pending_id'); }catch(e){}
+  if(!pid) return;
+  let ok = await deletePendingPdf(pid);
+  if(!ok) ok = await deletePendingPdf(pid); // 1回だけ再試行
+  if(ok){
+    _currentPendingId = null;
+    try{ localStorage.removeItem('voucher_pending_id'); }catch(e){}
+  }
+  try{ await refreshPendingBanner(); }catch(e){}
+  try{ await refreshPendingInSignArea(); }catch(e){}
 }
 
 // 保留バナーを更新
 async function refreshPendingBanner(){
   try{
-    const list = await getPendingPdfs();
+    let list = await getPendingPdfs();
+    // 取りこぼし対策：同名の署名済みPDFが保留登録より後に保存されていれば、完了済みとして保留を自動削除
+    if(list.length > 0 && !_currentPendingId){
+      try{
+        const arch = await getAllArchive();
+        const base = n => String(n||'').replace(/\.pdf$/i,'').trim().toLowerCase();
+        const stale = list.filter(p => arch.some(a => a.type!=='pending' && a.type!=='merged' &&
+          base(a.filename)===base(p.filename) && new Date(a.savedAt) > new Date(p.savedAt)));
+        for(const p of stale) await deletePendingPdf(p.id);
+        if(stale.length) list = list.filter(p => !stale.some(x=>x.id===p.id));
+      }catch(e){ console.warn('保留の自動整理エラー（無視）:', e); }
+    }
     const banner = document.getElementById('pendingBanner');
     const countEl = document.getElementById('pendingCount');
     if(list.length > 0){
@@ -3259,6 +3307,7 @@ async function loadPendingPdf(id){
     const file = new File([blob], data.filename, {type:'application/pdf'});
     // 保留IDを記憶しておく（サイン完了後に削除するため）
     _currentPendingId = id;
+    try{ localStorage.setItem('voucher_pending_id', id); }catch(e){}
     // 保留リスト画面を閉じてサイン収集画面へ
     document.getElementById('pendingListArea').style.display='none';
     document.getElementById('modeSelect').style.display='none';
@@ -4262,6 +4311,31 @@ async function downloadSelectedArchive(){
   }
 }
 
+async function _countPdfPages(bytes){
+  try{
+    const doc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
+    return doc.numPages;
+  }catch(e){ return null; }
+}
+
+async function _rasterizeInto(mergedDoc, bytes){
+  const doc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
+  let n = 0;
+  for(let i=1;i<=doc.numPages;i++){
+    const page = await doc.getPage(i);
+    const vp1 = page.getViewport({scale:1});
+    const vp = page.getViewport({scale:2});
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+    const img = await mergedDoc.embedJpg(canvas.toDataURL('image/jpeg', 0.92));
+    const pg = mergedDoc.addPage([vp1.width, vp1.height]);
+    pg.drawImage(img, {x:0, y:0, width:vp1.width, height:vp1.height});
+    n++;
+  }
+  return n;
+}
+
 async function mergeAndDownloadSelected(){
   if(archiveSelectedIds.size === 0) return;
   const btn = document.querySelector('.archive-bulk-merge');
@@ -4272,6 +4346,7 @@ async function mergeAndDownloadSelected(){
     let firstRecord = null;
     const mergedIds = [];    // 実際にページを結合できたレコードのID（削除してよいもの）
     const failedNames = [];  // 読み込み・結合に失敗したファイル名（一覧から残す）
+    let expectedTotal = 0;   // 結合できた各PDFのページ数の合計（結合結果と照合する）
 
     // ── 結合順を決定：領収書添付（type==='receipt'）は常に最後、それ以外（voucher等）が先 ──
     const recordsToMerge = [];
@@ -4287,31 +4362,36 @@ async function mergeAndDownloadSelected(){
       const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
       if(!bytes.length){ failedNames.push(r.filename); continue; }
 
-      // ── PDF読み込み：まず通常読み込み、失敗したらXRef修復（cleanPdfBytes）してから再試行 ──
-      let srcDoc = null;
-      try{
-        srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true, throwOnInvalidObject:false});
-      }catch(e1){
-        console.warn('通常読み込みに失敗。修復を試みます:', r.filename, e1);
+      // ── ページ数の正解を pdf.js で数え、pdf-lib で結合したページ数と一致するか検証しながら結合 ──
+      const expected = await _countPdfPages(bytes);
+      let added = 0, ok = false;
+      for(const variant of ['raw','clean']){
         try{
-          const cleaned = await cleanPdfBytes(bytes);
-          srcDoc = await PDFLib.PDFDocument.load(cleaned, {ignoreEncryption:true, throwOnInvalidObject:false});
-        }catch(e2){
-          console.warn('結合スキップ（読み込み失敗）:', r.filename, e2);
-          failedNames.push(r.filename);
-          continue;
+          const useBytes = variant === 'raw' ? bytes : await cleanPdfBytes(bytes);
+          const srcDoc = await PDFLib.PDFDocument.load(useBytes, {ignoreEncryption:true, throwOnInvalidObject:false});
+          const cnt = srcDoc.getPageCount();
+          if(expected && cnt !== expected){
+            console.warn(`ページ数不一致(${variant}):`, r.filename, 'pdf-lib=', cnt, 'pdf.js=', expected);
+            continue;
+          }
+          const pages = await mergedDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+          pages.forEach(pg => mergedDoc.addPage(pg));
+          added = cnt; ok = true; break;
+        }catch(e1){
+          console.warn(`結合の読み込みに失敗(${variant}):`, r.filename, e1);
         }
       }
-
-      try{
-        const pageCount = srcDoc.getPageCount();
-        for(let i=0;i<pageCount;i++){
-          const [copied] = await mergedDoc.copyPages(srcDoc, [i]);
-          mergedDoc.addPage(copied);
-        }
+      if(!ok){
+        // 最終手段：各ページを画像化して取り込む（見た目は同じ、文字選択は不可）
+        try{
+          added = await _rasterizeInto(mergedDoc, bytes);
+          ok = added > 0 && (!expected || added === expected);
+        }catch(e2){ console.warn('画像化での結合にも失敗:', r.filename, e2); }
+      }
+      if(ok){
+        expectedTotal += added;
         mergedIds.push(id);
-      }catch(e){
-        console.warn('結合スキップ（ページコピー失敗）:', r.filename, e);
+      } else {
         failedNames.push(r.filename);
       }
     }
@@ -4324,6 +4404,12 @@ async function mergeAndDownloadSelected(){
     // ── 一部のPDFが結合できなかった場合は、保存・ダウンロードの前に必ず知らせる ──
     if(failedNames.length > 0){
       alert(`⚠️ 以下のPDFは読み込みに失敗したため、結合結果に含まれていません：\n\n${failedNames.join('\n')}\n\nこれらは一覧に残したままにします。`);
+    }
+
+    // ── 検証：結合結果のページ数が、各PDFのページ数の合計と一致しなければ中止（元PDFは一切消さない） ──
+    if(mergedDoc.getPageCount() !== expectedTotal){
+      alert(`⚠️ 結合結果のページ数が合いません（期待${expectedTotal}ページ／実際${mergedDoc.getPageCount()}ページ）。\n安全のため、保存と元PDFの削除は行いませんでした。`);
+      return;
     }
 
     const out = await mergedDoc.save();
@@ -4344,6 +4430,10 @@ async function mergeAndDownloadSelected(){
       alert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
     }
 
+    if(!newId){
+      alert('結合ファイルが一覧に保存されなかったため、元のPDFは削除せずに残しました。');
+    }
+
     // ── 保存に成功した場合のみ、実際に結合できたPDFだけを一覧から削除する ──
     // （読み込みに失敗して結合に含まれなかったPDFは、誤って消さないよう一覧に残す）
     // ※ スマホではダウンロード開始で処理が中断されることがあるため、削除はダウンロードより先に行う
@@ -4353,6 +4443,19 @@ async function mergeAndDownloadSelected(){
         console.error('結合元PDFの削除に失敗:', delErr);
         alert('⚠️ 結合ファイルは保存できましたが、元のPDFの削除に失敗しました。\n一覧から手動で削除してください。\n' + delErr.message);
       }
+    }
+
+    // ── 削除の確認：まだ一覧に残っていれば直接削除をやり直す ──
+    if(newId && mergedIds.length > 0){
+      try{
+        const db = await getFirestore();
+        const stillIdx = await _getVoucherIndex();
+        const leftover = mergedIds.filter(i => stillIdx[i]);
+        if(leftover.length > 0){
+          for(const i of leftover){ try{ await db.collection('vouchers').doc(i).delete(); }catch(x){} }
+          await _removeVoucherIndexEntries(leftover);
+        }
+      }catch(chkErr){ console.warn('削除の再確認に失敗:', chkErr); }
     }
 
     archiveSelectedIds = new Set();
@@ -4509,13 +4612,7 @@ async function saveCurrentToArchive(){
     }
     await saveToArchive(_lastSignedPdfBytes, _lastSignedFilename, 'sign');
     // 保留中PDFからサインした場合、保留レコードを削除
-    if(_currentPendingId){
-      try{
-        await deletePendingPdf(_currentPendingId);
-        _currentPendingId = null;
-        refreshPendingBanner();
-      }catch(e){ console.warn('保留削除エラー（無視）:', e); }
-    }
+    await _finishPending();
     if(btn){
       btn.textContent = '✓ 署名済み一覧に保存しました';
       btn.style.opacity = '1';
