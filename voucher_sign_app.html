@@ -352,6 +352,34 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .save-to-archive-btn{width:100%;padding:12px;border-radius:10px;border:2px solid #7c3aed;background:#faf5ff;color:#7c3aed;font-size:14px;font-weight:800;cursor:pointer;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .save-to-archive-btn:active{background:#7c3aed;color:#fff;}
 .save-to-archive-btn:disabled{border-color:#d1dce8;background:#f8fafc;color:#94a3b8;cursor:default;}
+
+/* ── 操作感（v4.25）：押した感触・なめらかな動き ── */
+:root{--ease-out:cubic-bezier(.22,1,.36,1);--ease-spring:cubic-bezier(.34,1.56,.64,1);}
+html{-webkit-text-size-adjust:100%;}
+button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.receipt-box,.ra-box{touch-action:manipulation;-webkit-touch-callout:none;}
+.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.receipt-box,.ra-box,.dl-btn,.ra-dl-btn,.reset-btn,.ra-back,
+.archive-ship-chip,.archive-ship-cat,.archive-add-btn,.archive-select-all-btn,.archive-del-btn,.save-to-archive-btn,
+.archive-bulk-dl,.archive-bulk-merge,.archive-item-del,.archive-item-rename,.archive-item-preview,.archive-item-confirm,
+.archive-month-header,.s-btn,#pendingBanner{
+  transition:transform .22s var(--ease-spring),box-shadow .22s var(--ease-out),background-color .18s,border-color .18s,color .18s,opacity .18s,filter .18s !important;
+  will-change:transform;
+}
+.mode-btn,.archive-btn,.crew-card{box-shadow:0 1px 2px rgba(15,23,42,.06),0 4px 12px rgba(15,23,42,.05);}
+.mode-btn:active,.archive-btn:active,.crew-card:active,.upload-box:active,.receipt-box:active,.ra-box:active,#pendingBanner:active{
+  transform:scale(.97);opacity:1 !important;box-shadow:0 1px 2px rgba(15,23,42,.08);transition-duration:.08s !important;transition-timing-function:ease-out !important;}
+.dl-btn.ready:active,.ra-dl-btn.ready:active,.save-to-archive-btn:active,.archive-bulk-dl:active,.archive-bulk-merge:active,
+.archive-add-btn:active,.archive-select-all-btn:active,.archive-del-btn:active,.reset-btn:active,.ra-back:active,.dlc-btn:active,
+.archive-item-del:active,.archive-item-rename:active,.archive-item-preview:active,.archive-item-confirm:active,.s-btn:active{
+  transform:scale(.95);opacity:1 !important;transition-duration:.08s !important;transition-timing-function:ease-out !important;}
+.archive-ship-chip:active,.archive-ship-cat:active{transform:scale(.92);transition-duration:.08s !important;}
+.archive-month-header:active{transform:scale(.99);}
+.dl-btn.ready,.ra-dl-btn.ready{box-shadow:0 6px 16px rgba(37,99,235,.25);}
+.archive-item-check.checked{animation:chkPop .28s var(--ease-spring);}
+@keyframes chkPop{0%{transform:scale(.7);}60%{transform:scale(1.18);}100%{transform:scale(1);}}
+.archive-ship-chip,.archive-ship-cat{box-shadow:0 1px 2px rgba(15,23,42,.06);}
+#uploadScreen,#processingScreen,#appScreen,#archiveScreen,#modeSelect,#pendingListArea{animation:scrFade .28s var(--ease-out);}
+@keyframes scrFade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition-duration:.01s !important;}}
 </style>
 </head>
 <body>
@@ -464,11 +492,24 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.24</span>
+          <span class="version-current">v4.25</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.25</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ボタン・タブ・一覧のタップ感を改善（押すと沈み、離すとふわっと戻る動き）</li>
+            <li>画面切り替えをなめらかなアニメーションに</li>
+            <li>チェック時のポンと弾む動き、ボタンの影で立体感を追加</li>
+            <li>Android等ではタップ時に軽い振動（iPhoneは非対応）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.24</span>
@@ -4729,5 +4770,19 @@ refreshPendingBanner();
     <button class="dlc-cancel" onclick="dlChoiceCancel()">キャンセル</button>
   </div>
 </div>
+<script>
+/* 操作感：タップ時の軽い振動（対応端末のみ。iPhoneは非対応のため無視されます） */
+(function(){
+  var SEL='button,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.archive-ship-chip,.archive-ship-cat,.archive-item-check,.archive-month-header,.archive-item-del,.archive-item-rename,.archive-item-preview,.archive-item-confirm,.upload-box,.receipt-box,.ra-box,#pendingBanner';
+  document.addEventListener('pointerdown',function(e){
+    try{
+      if(e.pointerType==='mouse') return;
+      var t=e.target&&e.target.closest&&e.target.closest(SEL);
+      if(!t||t.disabled) return;
+      if(navigator.vibrate) navigator.vibrate(8);
+    }catch(_){}
+  },{passive:true});
+})();
+</script>
 </body>
 </html>
