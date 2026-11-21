@@ -404,6 +404,13 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
           <div class="archive-btn-sub">保存済みのPDFを月別に確認・ダウンロード</div>
         </div>
       </div>
+      <div class="archive-btn" style="border-color:#059669;" onclick="showMergedFiles()">
+        <div class="archive-btn-icon">📁</div>
+        <div class="mode-btn-text">
+          <div class="archive-btn-title">結合ファイル</div>
+          <div class="archive-btn-sub">結合して作成したPDFをまとめて確認・ダウンロード</div>
+        </div>
+      </div>
 
     </div>
 
@@ -456,11 +463,21 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.20</span>
+          <span class="version-current">v4.21</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.21</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合したPDFの置き場所を、署名済み一覧の中ではなくホーム画面の専用ボタン「📁 結合ファイル」に変更（結合すると自動でここに入り、署名済み一覧には残らない）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.20</span>
@@ -979,8 +996,8 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   <!-- 署名済み一覧スクリーン -->
   <div class="archive-screen" id="archiveScreen">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-      <div class="sec-label">📂 署名済み一覧</div>
-      <div style="display:flex;gap:6px;">
+      <div class="sec-label" id="archiveSecLabel">📂 署名済み一覧</div>
+      <div style="display:flex;gap:6px;" id="archiveHeaderBtns">
         <button class="archive-add-btn" style="border-color:#16a34a;background:#f0fdf4;color:#16a34a;" onclick="showVoucherCheck()">📋 Voucherチェック</button>
         <button class="archive-add-btn" onclick="document.getElementById('archiveUploadInput').click()">＋ PDFを追加</button>
       </div>
@@ -3023,14 +3040,24 @@ async function deleteArchiveIds(ids){
 /* ── アーカイブ画面 ── */
 let archiveSelectedIds = new Set();
 
-async function showArchive(){
+let _archiveView = 'archive'; // 'archive'=署名済み一覧 / 'merged'=結合ファイル（ホームから開く）
+
+async function showArchive(view){
+  _archiveView = (view === 'merged') ? 'merged' : 'archive';
+  const isMerged = _archiveView === 'merged';
   document.getElementById('modeSelect').style.display='none';
   document.getElementById('uploadScreen').style.display='flex';
   document.getElementById('archiveScreen').style.display='flex';
-  document.getElementById('headerSub').textContent='署名済み一覧';
+  document.getElementById('headerSub').textContent = isMerged ? '結合ファイル' : '署名済み一覧';
+  const lbl = document.getElementById('archiveSecLabel');
+  if(lbl) lbl.textContent = isMerged ? '📁 結合ファイル' : '📂 署名済み一覧';
+  const hb = document.getElementById('archiveHeaderBtns');
+  if(hb) hb.style.display = isMerged ? 'none' : 'flex';
+  _archiveShipFilter = null;
   archiveSelectedIds = new Set();
   await renderArchive();
 }
+function showMergedFiles(){ return showArchive('merged'); }
 
 function backToModeSelect(){
   // すべてのサブ画面を隠してモード選択に戻る
@@ -3043,6 +3070,7 @@ function backToModeSelect(){
   if(vcs) vcs.style.display='none';
   document.getElementById('modeSelect').style.display='flex';
   document.getElementById('headerSub').textContent='PDFをアップロードして開始';
+  _archiveView = 'archive';
   archiveSelectedIds = new Set();
   updateArchiveBulkBar();
   refreshPendingBanner();
@@ -3559,14 +3587,17 @@ async function renderArchive(){
   const list = document.getElementById('archiveList');
   list.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">読み込み中...</div>';
 
-  const allRecords = await getAllArchive();
+  // 結合ファイル（type==='merged'）はホームの「結合ファイル」画面に置き、署名済み一覧には出さない
+  const everyRecord = await getAllArchive();
+  const allRecords = everyRecord.filter(r => (_archiveView === 'merged') ? r.type === 'merged' : r.type !== 'merged');
 
   if(allRecords.length === 0){
+    const isM = _archiveView === 'merged';
     list.innerHTML = `
       <div class="archive-empty">
         <div class="archive-empty-icon">📭</div>
-        <div class="archive-empty-text">保存されたPDFはありません</div>
-        <div class="archive-empty-sub">サイン収集または領収書添付後に<br>「署名済み一覧に保存」ボタンで保存できます</div>
+        <div class="archive-empty-text">${isM ? '結合ファイルはまだありません' : '保存されたPDFはありません'}</div>
+        <div class="archive-empty-sub">${isM ? '署名済み一覧で複数選択して「1つに結合」すると<br>ここに自動で保存されます' : 'サイン収集または領収書添付後に<br>「署名済み一覧に保存」ボタンで保存できます'}</div>
       </div>`;
     document.getElementById('archiveSelectAllRow').style.display = 'none';
     document.getElementById('archiveShipSummary').style.display = 'none';
@@ -3594,7 +3625,7 @@ async function renderArchive(){
 
   const shipSummary = document.getElementById('archiveShipSummary');
   const shipBody = document.getElementById('archiveShipBody');
-  shipSummary.style.display = 'block';
+  shipSummary.style.display = (_archiveView === 'merged') ? 'none' : 'block';
   shipBody.innerHTML = sortedMonthKeys.map(monthKey => {
     const shipMap = byMonthShip.get(monthKey);
     const sortedShips = [...shipMap.entries()].sort((a,b)=>{
@@ -3646,10 +3677,7 @@ async function renderArchive(){
   // フィルター適用（船名＋乗船/下船/他 のカテゴリ）
   const records = _applyShipFilter(allRecords);
 
-  // 「結合ファイル」フォルダ：結合して作成したPDF（type==='merged'）は通常の月別一覧ではなく
-  // 専用フォルダにまとめて表示する（絞り込み中は通常どおり一覧内に表示）
-  const folderItems = _archiveShipFilter === null ? records.filter(r => r.type === 'merged') : [];
-  const mainRecords = _archiveShipFilter === null ? records.filter(r => r.type !== 'merged') : records;
+  const mainRecords = records;
 
   // 月別グループ化
   const byMonth = new Map();
@@ -3666,25 +3694,6 @@ async function renderArchive(){
   });
 
   list.innerHTML = '';
-  if(folderItems.length > 0){
-    const sortedFolder = [...folderItems].sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
-    const folderOpen = _mergedFolderOpen;
-    const fcard = document.createElement('div');
-    fcard.className = 'archive-month-card';
-    fcard.style.cssText = 'border-color:#c4b5fd;';
-    fcard.innerHTML = `
-      <div class="archive-month-header" style="background:#f5f3ff;" onclick="toggleMergedFolder()">
-        <div class="archive-month-title">📁 結合ファイル</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="archive-month-count">${sortedFolder.length}件</span>
-          <span class="archive-month-arrow${folderOpen?' open':''}" id="mergedFolder_arrow">▼</span>
-        </div>
-      </div>
-      <div class="archive-month-items${folderOpen?' open':''}" id="mergedFolder">
-        ${sortedFolder.map(r => renderArchiveItem(r)).join('')}
-      </div>`;
-    list.appendChild(fcard);
-  }
   let openFirst = true;
   for(const [month, items] of sortedMonths){
     const sorted = [...items].sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
@@ -3738,7 +3747,7 @@ async function filterByShipCategory(ship, category){
       await filterByShip(null);
       return;
     }
-    const allRecords = await getAllArchive();
+    const allRecords = (await getAllArchive()).filter(r => r.type !== 'merged');
     const matches = allRecords.filter(r => extractShipName(r.filename) === ship && extractCategory(r.filename) === category);
     if(matches.length === 1){
       await previewArchiveItem(matches[0].id);
@@ -3902,7 +3911,7 @@ function updateArchiveBulkBar(){
 
 async function toggleSelectAll(){
   // フィルターで絞り込んでいる場合は、表示中の件だけを対象に全選択する
-  const records = _applyShipFilter(await getAllArchive());
+  const records = _applyShipFilter((await getAllArchive()).filter(r => (_archiveView === 'merged') ? r.type === 'merged' : r.type !== 'merged'));
   if(archiveSelectedIds.size === records.length){
     // 全解除
     archiveSelectedIds = new Set();
