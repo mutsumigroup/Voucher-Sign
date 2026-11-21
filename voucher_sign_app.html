@@ -333,8 +333,9 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-ship-row-cats{display:flex;flex-wrap:wrap;gap:6px;}
 .archive-ship-cat{display:inline-flex;align-items:center;border-radius:14px;padding:4px 10px;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:filter .15s;}
 .archive-ship-cat:active{filter:brightness(.95);}
-.archive-ship-cat.embark{background:#dcfce7;color:#15803d;}
-.archive-ship-cat.disembark{background:#fee2e2;color:#b91c1c;}
+.archive-ship-cat.embark{background:#fee2e2;color:#b91c1c;}
+.archive-ship-cat.disembark{background:#dbeafe;color:#1d4ed8;}
+.archive-ship-cat.vm{background:#fef3c7;color:#b45309;}
 .archive-ship-cat.other{background:#f1f5f9;color:#475569;}
 .archive-ship-cat.active{border-color:#2563eb;box-shadow:0 0 0 1.5px #bfdbfe;}
 .archive-empty{text-align:center;padding:40px 20px;color:#94a3b8;}
@@ -463,11 +464,23 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.21</span>
+          <span class="version-current">v4.22</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.22</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>船名別件数の色を変更：乗船＝赤、下船＝青</li>
+            <li>新機能：PDF内に「VM」の記載があるものを「VM」枠として分類（タップで絞り込み／もう一度タップで解除）。VMのPDFは乗船・下船ではなくVMとして数えます</li>
+            <li>既存のPDFは初回表示時に自動でVM判定（件数が多い間は少し時間がかかります）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.21</span>
@@ -2785,7 +2798,8 @@ function _voucherIndexMeta(data){
     dateOnly: !!data.dateOnly,
     checksum: data.checksum || null,
     confirmed: !!data.confirmed,
-    chunks: data.pdfChunkCount || 0   // 大きなPDFを分割保存している場合の分割数
+    chunks: data.pdfChunkCount || 0,   // 大きなPDFを分割保存している場合の分割数
+    isVM: (data.isVM === undefined || data.isVM === null) ? null : !!data.isVM  // PDF内に「VM」の記載があるか（null=未判定）
   };
 }
 
@@ -2909,6 +2923,30 @@ async function _patchVoucherIndexFields(id, fieldsObj){
   }catch(e){ console.warn('インデックス部分更新に失敗（無視）:', e); }
 }
 
+// PDF本文に「VM」の記載があるか判定（全ページのテキストを調べる）
+async function _detectVM(bytes){
+  try{
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const doc = await pdfjsLib.getDocument({data:u8.slice(), stopAtErrors:false}).promise;
+    const n = Math.min(doc.numPages, 20);
+    for(let i=1;i<=n;i++){
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map(it=>it.str).join(' ');
+      if(/\bVM\b/.test(text)) return true;
+    }
+    return false;
+  }catch(e){
+    console.warn('VM判定失敗:', e);
+    return null;
+  }
+}
+
+// 一覧用の区分：PDFにVM記載があれば 'vm'、なければファイル名から 乗船/下船/他
+function _recCat(r){
+  return r.isVM ? 'vm' : extractCategory(r.filename);
+}
+
 async function saveToArchive(pdfBytes, filename, type, customDate){
   // type: 'sign' | 'receipt' | 'upload'
   // customDate: 'YYYY-MM-DD' string (optional, for upload type)
@@ -2953,6 +2991,8 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
       checksum,  // 重複検知用チェックサム
       dateOnly: !!customDate  // 日付のみフラグ
     };
+    const vmFlag = await _detectVM(bytes);
+    if(vmFlag !== null) record.isVM = vmFlag;
     const docRef = db.collection('vouchers').doc();
     if(pdfBase64.length + filename.length + 300 > INLINE_LIMIT){
       // 大きいPDFは分割保存（先に分割データを書き、最後に親レコードを作る）
@@ -3286,7 +3326,7 @@ let _archiveShipFilter = null; // null なら全件表示。それ以外は {shi
 function _applyShipFilter(records){
   return _archiveShipFilter
     ? records.filter(r => extractShipName(r.filename) === _archiveShipFilter.ship
-        && (_archiveShipFilter.category == null || extractCategory(r.filename) === _archiveShipFilter.category))
+        && (_archiveShipFilter.category == null || _recCat(r) === _archiveShipFilter.category))
     : records;
 }
 
@@ -3612,9 +3652,9 @@ async function renderArchive(){
     const monthKey = `${d.getFullYear()}年${d.getMonth()+1}月`;
     if(!byMonthShip.has(monthKey)) byMonthShip.set(monthKey, new Map());
     const ship = extractShipName(r.filename);
-    const cat = extractCategory(r.filename);
+    const cat = _recCat(r);
     const m = byMonthShip.get(monthKey);
-    if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0});
+    if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0, vm:0});
     m.get(ship)[cat]++;
   }
   const sortedMonthKeys = [...byMonthShip.keys()].sort((a,b)=>{
@@ -3629,11 +3669,11 @@ async function renderArchive(){
   shipBody.innerHTML = sortedMonthKeys.map(monthKey => {
     const shipMap = byMonthShip.get(monthKey);
     const sortedShips = [...shipMap.entries()].sort((a,b)=>{
-      const ta = a[1].embark + a[1].disembark + a[1].other;
-      const tb = b[1].embark + b[1].disembark + b[1].other;
+      const ta = a[1].embark + a[1].disembark + a[1].other + a[1].vm;
+      const tb = b[1].embark + b[1].disembark + b[1].other + b[1].vm;
       return tb - ta;
     });
-    const totalInMonth = sortedShips.reduce((s,[,c])=>s + c.embark + c.disembark + c.other, 0);
+    const totalInMonth = sortedShips.reduce((s,[,c])=>s + c.embark + c.disembark + c.other + c.vm, 0);
     return `
       <div class="archive-ship-month-label">${escHtml(monthKey)}（${totalInMonth}件）</div>
       <div class="archive-ship-rows">
@@ -3643,6 +3683,7 @@ async function renderArchive(){
           const tags = [];
           if(c.embark>0) tags.push(`<span class="archive-ship-cat embark${isActive('embark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','embark')">乗船 ${c.embark}件</span>`);
           if(c.disembark>0) tags.push(`<span class="archive-ship-cat disembark${isActive('disembark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','disembark')">下船 ${c.disembark}件</span>`);
+          if(c.vm>0) tags.push(`<span class="archive-ship-cat vm${isActive('vm')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm')">VM ${c.vm}件</span>`);
           if(c.other>0) tags.push(`<span class="archive-ship-cat other${isActive('other')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','other')">他 ${c.other}件</span>`);
           return `
           <div class="archive-ship-row">
@@ -3719,6 +3760,35 @@ async function renderArchive(){
 
   document.getElementById('archiveSelectAllRow').style.display = 'flex';
   updateArchiveBulkBar();
+  _backfillVMFlags(everyRecord);
+}
+
+let _vmBackfillRunning = false;
+// VM判定が未実施の既存PDFを順番に判定してインデックスに記録（初回のみ時間がかかる）
+async function _backfillVMFlags(records){
+  if(_vmBackfillRunning) return;
+  const todo = records.filter(r => r.isVM === null || r.isVM === undefined);
+  if(todo.length === 0) return;
+  _vmBackfillRunning = true;
+  const label = document.getElementById('archiveSecLabel');
+  const baseText = label ? label.textContent : '';
+  let changed = 0;
+  try{
+    const db = await getFirestore();
+    for(let i=0;i<todo.length;i++){
+      if(label) label.textContent = `${baseText}（VM判定中 ${i+1}/${todo.length}）`;
+      const r = await getArchiveById(todo[i].id);
+      if(!r || !r.pdfBase64) continue;
+      const flag = await _detectVM(base64ToUint8(r.pdfBase64));
+      if(flag === null) continue;
+      await db.collection('vouchers').doc(r.id).update({ isVM: flag });
+      await _patchVoucherIndexFields(r.id, { isVM: flag });
+      if(flag) changed++;
+    }
+  }catch(e){ console.warn('VM判定の一括処理に失敗:', e); }
+  _vmBackfillRunning = false;
+  if(label) label.textContent = baseText;
+  if(document.getElementById('archiveScreen').style.display !== 'none') await renderArchive();
 }
 
 let _mergedFolderOpen = true; // 結合ファイルフォルダの開閉状態
@@ -3748,7 +3818,7 @@ async function filterByShipCategory(ship, category){
       return;
     }
     const allRecords = (await getAllArchive()).filter(r => r.type !== 'merged');
-    const matches = allRecords.filter(r => extractShipName(r.filename) === ship && extractCategory(r.filename) === category);
+    const matches = allRecords.filter(r => extractShipName(r.filename) === ship && _recCat(r) === category);
     if(matches.length === 1){
       await previewArchiveItem(matches[0].id);
       return;
@@ -4157,7 +4227,9 @@ async function savePagesEditor(){
         try{ await db.collection('vouchers_chunks').doc(`${id}_${i}`).delete(); }catch(e){}
       }
     }
-    await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks });
+    const newVM = await _detectVM(outBytes);
+    if(newVM !== null){ await db.collection('vouchers').doc(id).update({ isVM: newVM }); }
+    await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newVM });
 
     alert(`${markedPages.size}ページを削除しました（残り${pageCount - markedPages.size}ページ）`);
     closePagesEditor();
