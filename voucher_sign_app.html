@@ -456,11 +456,24 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.18</span>
+          <span class="version-current">v4.19</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.19</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合したPDFは専用の「📁 結合ファイル」フォルダに自動で移動して表示（通常の月別一覧には残らない）</li>
+            <li>結合後は元のPDFを確実に削除（スマホでもPCでも、保存→削除→一覧更新→ダウンロードの順に処理）</li>
+            <li>約1MBを超える大きな結合PDFも保存できるよう分割保存に対応（これまで保存失敗で元PDFが残る原因）</li>
+            <li>一覧に残ってしまう削除済みの「幽霊」項目を自動で掃除</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.18</span>
@@ -2744,8 +2757,45 @@ function _voucherIndexMeta(data){
     savedAt: data.savedAt || new Date().toISOString(),
     dateOnly: !!data.dateOnly,
     checksum: data.checksum || null,
-    confirmed: !!data.confirmed
+    confirmed: !!data.confirmed,
+    chunks: data.pdfChunkCount || 0   // 大きなPDFを分割保存している場合の分割数
   };
+}
+
+/* ── 大きなPDF（約1MB超）の分割保存 ──
+   Firestoreは1ドキュメント約1MBまでのため、超える場合は本体を
+   vouchers_chunks コレクションに分割して保存し、親レコードには分割数だけ持たせる */
+const CHUNK_CHARS = 800000;
+const INLINE_LIMIT = 900000;
+
+async function _writeChunks(db, parentId, b64){
+  const n = Math.ceil(b64.length / CHUNK_CHARS);
+  for(let i=0;i<n;i++){
+    await db.collection('vouchers_chunks').doc(`${parentId}_${i}`).set({
+      parentId, idx: i, data: b64.substr(i*CHUNK_CHARS, CHUNK_CHARS)
+    });
+  }
+  return n;
+}
+
+async function _deleteChunks(db, parentId, count){
+  for(let i=0;i<count;i++){
+    try{ await db.collection('vouchers_chunks').doc(`${parentId}_${i}`).delete(); }catch(e){ console.warn('chunk delete', e); }
+  }
+}
+
+// 分割保存されているレコードのPDF本体を結合して pdfBase64 に戻す
+async function _hydrateRecord(db, rec){
+  if(rec && !rec.pdfBase64 && rec.pdfChunkCount > 0){
+    const parts = [];
+    for(let i=0;i<rec.pdfChunkCount;i++){
+      const d = await db.collection('vouchers_chunks').doc(`${rec.id}_${i}`).get();
+      if(!d.exists) throw new Error('PDFの分割データが見つかりません');
+      parts.push(d.data().data);
+    }
+    rec.pdfBase64 = parts.join('');
+  }
+  return rec;
 }
 
 async function _getVoucherIndexRef(){
@@ -2795,14 +2845,21 @@ async function _updateVoucherIndexEntry(id, meta){
 // インデックスから複数件を削除
 async function _removeVoucherIndexEntries(ids){
   if(!ids || ids.length === 0) return;
+  const ref = await _getVoucherIndexRef();
   try{
-    const ref = await _getVoucherIndexRef();
     const updates = {};
     for(const id of ids){
       updates[`items.${id}`] = firebase.firestore.FieldValue.delete();
     }
     await ref.update(updates);
-  }catch(e){ console.warn('インデックス削除に失敗（無視）:', e); }
+  }catch(e){
+    // 予備手段：インデックス全体を読み込み、該当項目を除いて書き直す
+    console.warn('インデックス削除に失敗。書き直しで再試行:', e);
+    const snap = await ref.get();
+    const items = (snap.exists && snap.data().items) ? { ...snap.data().items } : {};
+    ids.forEach(id => { delete items[id]; });
+    await ref.set({ items, updatedAt: new Date().toISOString() });
+  }
 }
 
 // インデックスの1項目だけ書き換え（ファイル名変更・確認状態トグルなど）
@@ -2862,26 +2919,24 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
     }
     const pdfBase64 = uint8ToBase64(bytes);
 
-    // ── Firestoreは1ドキュメントあたり約1MBまでという上限があるため、
-    //    それを超えそうな場合は分かりやすいエラーにして保存前に止める ──
-    const approxDocBytes = pdfBase64.length + filename.length + 300;
-    if(approxDocBytes > 950000){
-      const mb = (bytes.length / 1024 / 1024).toFixed(1);
-      throw new Error(`PDFのサイズが大きすぎるため保存できません（約${mb}MB）。ページ数や結合する枚数を減らしてから、もう一度お試しください。`);
-    }
-
     const record = {
       filename,
       type,
       savedAt,
       checksum,  // 重複検知用チェックサム
-      dateOnly: !!customDate,  // 日付のみフラグ
-      pdfBase64
+      dateOnly: !!customDate  // 日付のみフラグ
     };
-    const ref = await db.collection('vouchers').add(record);
+    const docRef = db.collection('vouchers').doc();
+    if(pdfBase64.length + filename.length + 300 > INLINE_LIMIT){
+      // 大きいPDFは分割保存（先に分割データを書き、最後に親レコードを作る）
+      record.pdfChunkCount = await _writeChunks(db, docRef.id, pdfBase64);
+    } else {
+      record.pdfBase64 = pdfBase64;
+    }
+    await docRef.set(record);
     // 軽量インデックスにも反映（一覧表示の高速化用）
-    await _updateVoucherIndexEntry(ref.id, _voucherIndexMeta(record));
-    return ref.id;
+    await _updateVoucherIndexEntry(docRef.id, _voucherIndexMeta(record));
+    return docRef.id;
   }catch(e){
     console.error('saveToArchive error:', e);
     throw e;
@@ -2907,7 +2962,9 @@ async function getAllArchiveFull(){
     const db = await getFirestore();
     const snap = await db.collection('vouchers').orderBy('savedAt','desc').get();
     // 「保留中（pending）」のレコードは署名済み一覧には表示しない
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.type !== 'pending');
+    const recs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.type !== 'pending');
+    for(const r of recs){ await _hydrateRecord(db, r); }
+    return recs;
   }catch(e){
     console.error('getAllArchiveFull error:', e);
     return [];
@@ -2918,8 +2975,12 @@ async function getArchiveById(id){
   try{
     const db = await getFirestore();
     const doc = await db.collection('vouchers').doc(id).get();
-    if(!doc.exists) return null;
-    return { id: doc.id, ...doc.data() };
+    if(!doc.exists){
+      // 本体が既に無いのに一覧（インデックス）に残っている「幽霊」項目は掃除する
+      _removeVoucherIndexEntries([id]).catch(()=>{});
+      return null;
+    }
+    return await _hydrateRecord(db, { id: doc.id, ...doc.data() });
   }catch(e){
     console.error('getArchiveById error:', e);
     return null;
@@ -2929,12 +2990,19 @@ async function getArchiveById(id){
 async function deleteArchiveIds(ids){
   try{
     const db = await getFirestore();
+    // 分割保存されているPDFの分割データも一緒に削除するため、分割数をインデックスから取得
+    let idx = {};
+    try{ idx = await _getVoucherIndex(); }catch(e){}
     const batch = db.batch();
     for(const id of ids){
       batch.delete(db.collection('vouchers').doc(id));
     }
     await batch.commit();
-    // 軽量インデックスからも削除
+    for(const id of ids){
+      const n = idx[id] && idx[id].chunks;
+      if(n) await _deleteChunks(db, id, n);
+    }
+    // 軽量インデックスからも削除（失敗した場合は必ず呼び出し元に伝える）
     await _removeVoucherIndexEntries(ids);
   }catch(e){
     console.error('deleteArchiveIds error:', e);
@@ -3568,9 +3636,14 @@ async function renderArchive(){
   // フィルター適用（船名＋乗船/下船/他 のカテゴリ）
   const records = _applyShipFilter(allRecords);
 
+  // 「結合ファイル」フォルダ：結合して作成したPDF（type==='merged'）は通常の月別一覧ではなく
+  // 専用フォルダにまとめて表示する（絞り込み中は通常どおり一覧内に表示）
+  const folderItems = _archiveShipFilter === null ? records.filter(r => r.type === 'merged') : [];
+  const mainRecords = _archiveShipFilter === null ? records.filter(r => r.type !== 'merged') : records;
+
   // 月別グループ化
   const byMonth = new Map();
-  for(const r of records){
+  for(const r of mainRecords){
     const d = new Date(r.savedAt);
     const key = `${d.getFullYear()}年${d.getMonth()+1}月`;
     if(!byMonth.has(key)) byMonth.set(key, []);
@@ -3583,6 +3656,25 @@ async function renderArchive(){
   });
 
   list.innerHTML = '';
+  if(folderItems.length > 0){
+    const sortedFolder = [...folderItems].sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+    const folderOpen = _mergedFolderOpen;
+    const fcard = document.createElement('div');
+    fcard.className = 'archive-month-card';
+    fcard.style.cssText = 'border-color:#c4b5fd;';
+    fcard.innerHTML = `
+      <div class="archive-month-header" style="background:#f5f3ff;" onclick="toggleMergedFolder()">
+        <div class="archive-month-title">📁 結合ファイル</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="archive-month-count">${sortedFolder.length}件</span>
+          <span class="archive-month-arrow${folderOpen?' open':''}" id="mergedFolder_arrow">▼</span>
+        </div>
+      </div>
+      <div class="archive-month-items${folderOpen?' open':''}" id="mergedFolder">
+        ${sortedFolder.map(r => renderArchiveItem(r)).join('')}
+      </div>`;
+    list.appendChild(fcard);
+  }
   let openFirst = true;
   for(const [month, items] of sortedMonths){
     const sorted = [...items].sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
@@ -3608,6 +3700,15 @@ async function renderArchive(){
 
   document.getElementById('archiveSelectAllRow').style.display = 'flex';
   updateArchiveBulkBar();
+}
+
+let _mergedFolderOpen = true; // 結合ファイルフォルダの開閉状態
+function toggleMergedFolder(){
+  _mergedFolderOpen = !_mergedFolderOpen;
+  const el = document.getElementById('mergedFolder');
+  const arrow = document.getElementById('mergedFolder_arrow');
+  if(el) el.classList.toggle('open', _mergedFolderOpen);
+  if(arrow) arrow.classList.toggle('open', _mergedFolderOpen);
 }
 
 async function filterByShip(ship){
@@ -4015,11 +4116,24 @@ async function savePagesEditor(){
     const newChecksum = _pdfChecksum(outBytes);
     const newPdfBase64 = uint8ToBase64(outBytes);
     const db = await getFirestore();
-    await db.collection('vouchers').doc(id).update({
-      pdfBase64: newPdfBase64,
-      checksum: newChecksum
-    });
-    await _patchVoucherIndexFields(id, { checksum: newChecksum });
+    const FV = firebase.firestore.FieldValue;
+    let oldChunks = 0;
+    try{ const ix = await _getVoucherIndex(); oldChunks = (ix[id] && ix[id].chunks) || 0; }catch(e){}
+    let fields, newChunks = 0;
+    if(newPdfBase64.length + 600 > INLINE_LIMIT){
+      newChunks = await _writeChunks(db, id, newPdfBase64);
+      fields = { pdfChunkCount: newChunks, pdfBase64: FV.delete(), checksum: newChecksum };
+    } else {
+      fields = { pdfBase64: newPdfBase64, pdfChunkCount: FV.delete(), checksum: newChecksum };
+    }
+    await db.collection('vouchers').doc(id).update(fields);
+    // 以前の分割データが不要になった分を削除
+    if(oldChunks > newChunks){
+      for(let i=newChunks;i<oldChunks;i++){
+        try{ await db.collection('vouchers_chunks').doc(`${id}_${i}`).delete(); }catch(e){}
+      }
+    }
+    await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks });
 
     alert(`${markedPages.size}ページを削除しました（残り${pageCount - markedPages.size}ページ）`);
     closePagesEditor();
@@ -4134,24 +4248,28 @@ async function mergeAndDownloadSelected(){
       alert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
     }
 
-    // 手元にも残せるようダウンロードは従来通り実行
-    const blob = new Blob([out], {type:'application/pdf'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.download = mergedFilename;
-    a.href = url; a.click();
-    URL.revokeObjectURL(url);
-
     // ── 保存に成功した場合のみ、実際に結合できたPDFだけを一覧から削除する ──
     // （読み込みに失敗して結合に含まれなかったPDFは、誤って消さないよう一覧に残す）
+    // ※ スマホではダウンロード開始で処理が中断されることがあるため、削除はダウンロードより先に行う
     if(newId && mergedIds.length > 0){
       try{ await deleteArchiveIds(mergedIds); }
-      catch(delErr){ console.warn('結合元PDFの削除に失敗（無視）:', delErr); }
+      catch(delErr){
+        console.error('結合元PDFの削除に失敗:', delErr);
+        alert('⚠️ 結合ファイルは保存できましたが、元のPDFの削除に失敗しました。\n一覧から手動で削除してください。\n' + delErr.message);
+      }
     }
 
     archiveSelectedIds = new Set();
     updateArchiveBulkBar();
     await renderArchive();
+
+    // 手元にも残せるようダウンロード（最後に実行）
+    const blob = new Blob([out], {type:'application/pdf'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.download = mergedFilename;
+    a.href = url; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }catch(e){
     alert('結合に失敗しました: ' + e.message);
   }finally{
