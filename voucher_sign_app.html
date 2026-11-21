@@ -456,11 +456,21 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.19</span>
+          <span class="version-current">v4.20</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.20</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>船名別件数の「乗船」「下船」「他」で絞り込み中に、同じボタンをもう一度タップすると絞り込みを解除して元の一覧に戻るように変更</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.19</span>
@@ -3723,6 +3733,11 @@ async function filterByShip(ship){
 // 該当PDFが1件だけならそのままプレビュー表示、複数あれば一覧を絞り込んで表示
 async function filterByShipCategory(ship, category){
   try{
+    // 既に同じ絞り込み中なら、もう一度タップで解除（元の一覧に戻す）
+    if(_archiveShipFilter && _archiveShipFilter.ship === ship && _archiveShipFilter.category === category){
+      await filterByShip(null);
+      return;
+    }
     const allRecords = await getAllArchive();
     const matches = allRecords.filter(r => extractShipName(r.filename) === ship && extractCategory(r.filename) === category);
     if(matches.length === 1){
