@@ -490,6 +490,13 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
           <div class="archive-btn-sub">結合して作成したPDFをまとめて確認・ダウンロード</div>
         </div>
       </div>
+      <div class="archive-btn" style="border-color:#64748b;" onclick="showTrash()">
+        <div class="archive-btn-icon">🗑</div>
+        <div class="mode-btn-text">
+          <div class="archive-btn-title">ゴミ箱</div>
+          <div class="archive-btn-sub">削除したPDFを確認・元に戻す</div>
+        </div>
+      </div>
 
     </div>
 
@@ -542,11 +549,23 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.35</span>
+          <span class="version-current">v4.36</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.36</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ホームに「ゴミ箱」を追加。署名済み一覧で削除したPDFは一度ゴミ箱に入り、確認・元に戻す・完全に削除ができます</li>
+            <li>元に戻す時、同じPDFが既に一覧にあれば確認します（ダブり防止）</li>
+            <li>結合した元PDFの整理（結合時の自動削除）は、従来どおりゴミ箱を使わず完全に削除します</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.35</span>
@@ -3542,6 +3561,122 @@ async function unmergeArchiveItem(){
   }
 }
 
+
+/* ── ゴミ箱：削除したPDFは一度ここに入り、元に戻せる ── */
+// 一覧から消して type を 'trash' にする（PDF本体は残す）
+async function trashArchiveIds(ids){
+  ids = (ids||[]).filter(Boolean); if(ids.length===0) return;
+  const db = await getFirestore();
+  const idx = await _getVoucherIndex();
+  const now = new Date().toISOString();
+  for(const id of ids){
+    const cur = idx[id] || {};
+    await db.collection('vouchers').doc(id).update({ type:'trash', origType: cur.type || 'sign', deletedAt: now });
+  }
+  await _removeVoucherIndexEntries(ids);
+}
+
+let _trashItems = [];
+
+function closeTrash(){ const o=document.getElementById('trashOverlay'); if(o) o.remove(); }
+
+async function showTrash(){
+  closeTrash();
+  const ov = document.createElement('div'); ov.id='trashOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#f0f4f8;display:flex;flex-direction:column;';
+  ov.innerHTML = `<div style="background:#1a3252;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;font-size:16px;font-weight:800;">🗑 ゴミ箱</div>
+      <button onclick="closeTrash()" style="padding:6px 12px;border-radius:8px;border:none;background:#475569;color:#fff;font-size:14px;font-weight:700;">✕ 閉じる</button></div>
+    <div id="trashBody" style="flex:1;overflow:auto;padding:16px;max-width:560px;width:100%;margin:0 auto;"></div>`;
+  document.body.appendChild(ov);
+  await renderTrash();
+}
+
+async function renderTrash(){
+  const body = document.getElementById('trashBody'); if(!body) return;
+  body.innerHTML = '<div style="text-align:center;padding:40px 10px;color:#64748b;font-size:14px;font-weight:700;">読み込み中...</div>';
+  try{
+    const db = await getFirestore();
+    const snap = await db.collection('vouchers').where('type','==','trash').get();
+    _trashItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    _trashItems.sort((a,b)=> new Date(b.deletedAt||0) - new Date(a.deletedAt||0));
+    if(_trashItems.length===0){
+      body.innerHTML = '<div style="text-align:center;padding:50px 10px;color:#94a3b8;font-size:14px;"><div style="font-size:40px;margin-bottom:8px;">📭</div>ゴミ箱は空です</div>';
+      return;
+    }
+    const lbl = {sign:'サイン収集', receipt:'領収書添付', upload:'直接追加', merged:'結合'};
+    const fmt = iso => { const d=new Date(iso); return isNaN(d)?'':`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+    body.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:12px;color:#64748b;">${_trashItems.length}件（自動では消えません）</div>
+        <button onclick="emptyTrash()" style="padding:7px 12px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-weight:800;font-size:12px;">🗑 ゴミ箱を空にする</button></div>` +
+      _trashItems.map(t=>`<div style="background:#fff;border:1.5px solid #d1dce8;border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:800;word-break:break-all;">${escHtml(t.filename||'')}</div>
+        <div style="font-size:11.5px;color:#64748b;margin:3px 0 8px;">${lbl[t.origType]||'サイン収集'} ・ 削除日 ${fmt(t.deletedAt)}</div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="trashPreview('${t.id}')" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid #7c3aed;background:#fff;color:#7c3aed;font-weight:800;font-size:13px;">👁 確認</button>
+          <button onclick="restoreFromTrash('${t.id}')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-weight:800;font-size:13px;">↩ 元に戻す</button>
+          <button onclick="purgeTrashItem('${t.id}')" style="padding:8px 12px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-weight:800;font-size:13px;">完全に削除</button>
+        </div></div>`).join('');
+  }catch(e){
+    body.innerHTML = `<div style="padding:30px 10px;color:#b91c1c;font-size:13px;">読み込みに失敗しました: ${escHtml(e.message||String(e))}</div>`;
+  }
+}
+
+async function _trashFullBytes(t){
+  const rec = await _hydrateRecord(await getFirestore(), t);
+  return rec && rec.pdfBase64 ? base64ToUint8(rec.pdfBase64) : null;
+}
+
+async function trashPreview(id){
+  const t = _trashItems.find(x=>x.id===id); if(!t) return;
+  try{
+    const bytes = await _trashFullBytes(t);
+    if(!bytes){ alert('PDFを読み込めませんでした'); return; }
+    _previewArchiveId = null;
+    _openPdfPreviewFromBytes(bytes, t.filename || 'PDF');
+    const umb = document.getElementById('pdfPreviewUnmergeBtn'); if(umb) umb.style.display='none';
+  }catch(e){ alert('プレビューに失敗しました: ' + e.message); }
+}
+
+async function restoreFromTrash(id){
+  const t = _trashItems.find(x=>x.id===id); if(!t) return;
+  try{
+    // 同じPDFが既に一覧にある場合は確認（ダブり防止）
+    const idx = await _getVoucherIndex();
+    const dup = t.checksum && Object.values(idx).find(x => x.checksum === t.checksum);
+    if(dup && !confirm(`同じPDFが既に一覧にあります（${dup.filename}）。\nそれでも元に戻しますか？\n（「キャンセル」で戻しません）`)) return;
+    const db = await getFirestore();
+    const orig = t.origType || 'sign';
+    const FV = firebase.firestore.FieldValue;
+    await db.collection('vouchers').doc(id).update({ type: orig, origType: FV.delete(), deletedAt: FV.delete() });
+    const rec = { ...t, type: orig }; delete rec.origType; delete rec.deletedAt;
+    await _updateVoucherIndexEntry(id, _voucherIndexMeta(rec));
+    await renderTrash();
+    alert('元に戻しました（' + (orig==='merged' ? '結合ファイル' : '署名済み一覧') + '）');
+  }catch(e){ alert('元に戻せませんでした: ' + e.message); }
+}
+
+async function _purgeTrash(ids){
+  const db = await getFirestore();
+  for(const id of ids){
+    const t = _trashItems.find(x=>x.id===id);
+    const n = t && t.pdfChunkCount;
+    await db.collection('vouchers').doc(id).delete();
+    if(n){ try{ await _deleteChunks(db, id, n); }catch(e){ console.warn(e); } }
+  }
+}
+
+async function purgeTrashItem(id){
+  if(!confirm('完全に削除します。元に戻せません。よろしいですか？')) return;
+  try{ await _purgeTrash([id]); await renderTrash(); }catch(e){ alert('削除に失敗しました: ' + e.message); }
+}
+
+async function emptyTrash(){
+  if(_trashItems.length===0) return;
+  if(!confirm(`ゴミ箱の${_trashItems.length}件をすべて完全に削除します。元に戻せません。よろしいですか？`)) return;
+  try{ await _purgeTrash(_trashItems.map(x=>x.id)); await renderTrash(); }catch(e){ alert('削除に失敗しました: ' + e.message); }
+}
+
 async function showArchive(view){
   _archiveView = (view === 'merged') ? 'merged' : 'archive';
   const isMerged = _archiveView === 'merged';
@@ -5078,8 +5213,8 @@ async function _doUploadWithDate(file, chosenDate){
 }
 
 async function deleteSingleArchive(id){
-  if(!confirm('この1件を削除しますか？')) return;
-  await deleteArchiveIds([id]);
+  if(!confirm('この1件をゴミ箱に移動しますか？\n（ホームの「ゴミ箱」から元に戻せます）')) return;
+  try{ await trashArchiveIds([id]); }catch(e){ alert('削除に失敗しました: ' + e.message); return; }
   archiveSelectedIds.delete(id);
   updateArchiveBulkBar();
   await renderArchive();
@@ -5088,8 +5223,8 @@ async function deleteSingleArchive(id){
 async function deleteSelectedArchive(){
   if(archiveSelectedIds.size === 0) return;
   const n = archiveSelectedIds.size;
-  if(!confirm(`選択中の${n}件を削除しますか？`)) return;
-  await deleteArchiveIds([...archiveSelectedIds]);
+  if(!confirm(`選択中の${n}件をゴミ箱に移動しますか？\n（ホームの「ゴミ箱」から元に戻せます）`)) return;
+  try{ await trashArchiveIds([...archiveSelectedIds]); }catch(e){ alert('削除に失敗しました: ' + e.message); return; }
   archiveSelectedIds = new Set();
   await renderArchive();
 }
@@ -5158,7 +5293,7 @@ async function saveReceiptAttachToArchive(){
       _raSourceArchiveId = null;
       if(confirm('元の署名済みPDF（領収書添付前）は不要であれば削除できます。\n\n削除しますか？\n（「キャンセル」を選ぶと両方残ります）')){
         try{
-          await deleteArchiveIds([srcId]);
+          await trashArchiveIds([srcId]);
         }catch(delErr){ console.warn('元PDF削除エラー:', delErr); }
       }
     }
