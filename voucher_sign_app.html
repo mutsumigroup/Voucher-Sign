@@ -594,11 +594,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.49</span>
+          <span class="version-current">v4.50</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.50</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ページ編集で保存した後も、プレビュー・選択中の行（水色）・一覧のスクロール位置がそのまま残り、更新後のPDFが表示されるように（以前はプレビューが閉じて一覧の位置が戻っていました）</li>
+            <li>署名済み一覧・結合ファイル、PC・スマホ共通</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.49</span>
@@ -4925,12 +4936,13 @@ async function downloadArchiveItem(id){
 function toggleItemMore(id){ const el = document.getElementById('aitem_' + id); if(el) el.classList.toggle('more-open'); }
 
 /* ── スマホ用PDFビューア：iPhone等はiframeでPDFを表示できないため、アプリ内で描画してワンタップで開く ── */
-let _mvDoc = null, _mvZoom = 1, _mvKey = '';
+let _mvDoc = null, _mvZoom = 1, _mvKey = '', _mvScroller = null, _mvPendingRatio = null;
+function _mvScrollRatio(){ const sc = _mvScroller; return (sc && sc.isConnected && sc.scrollHeight > 0) ? sc.scrollTop / sc.scrollHeight : null; }
 function _useInAppViewer(){
   const ua = navigator.userAgent;
   return /iPad|iPhone|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) || window.innerWidth < 1000;
 }
-function _mvCleanup(){ try{ if(_mvDoc) _mvDoc.destroy(); }catch(e){} _mvDoc = null; _mvZoom = 1; }
+function _mvCleanup(){ try{ if(_mvDoc) _mvDoc.destroy(); }catch(e){} _mvDoc = null; _mvZoom = 1; _mvScroller = null; }
 async function _openMobileViewer(body, bytes){
   _mvCleanup();
   body.innerHTML = '';
@@ -4942,7 +4954,7 @@ async function _openMobileViewer(body, bytes){
   const inner = document.createElement('div');
   inner.style.cssText = 'width:100%;padding:8px 0 80px;';
   inner.innerHTML = '<div style="color:#e2e8f0;text-align:center;padding:40px 0;font-size:13px;">読み込み中…</div>';
-  sc.appendChild(inner); wrap.appendChild(sc);
+  sc.appendChild(inner); wrap.appendChild(sc); _mvScroller = sc;
   const ctl = document.createElement('div');
   ctl.style.cssText = 'position:absolute;right:12px;bottom:16px;display:flex;align-items:center;gap:6px;background:rgba(15,23,42,.82);border-radius:22px;padding:6px 8px;z-index:5;';
   const mk = (t, f) => { const b = document.createElement('button'); b.textContent = t; b.onclick = f;
@@ -5008,6 +5020,7 @@ async function _openMobileViewer(body, bytes){
       div._n = i; inner.appendChild(div); pages.push(div);
       if(i <= 2) refresh();
     }
+    if(_mvPendingRatio !== null){ sc.scrollTop = _mvPendingRatio * sc.scrollHeight; _mvPendingRatio = null; }   // ページ編集の保存後：見ていた位置に戻す
     refresh();
   }catch(e){
     inner.innerHTML = '<div style="color:#fecaca;text-align:center;padding:40px 16px;font-size:13px;">PDFを表示できませんでした：' + escHtml(e.message || String(e)) + '</div>';
@@ -5361,9 +5374,17 @@ async function savePagesEditor(){
     await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newFl ? newFl.vm : null, ranks: newFl ? newFl.ranks : null });
 
     alert(`保存しました（${msg.join('、')}／現在${kept.length}ページ）`);
+    // 保存後も「今の状態」のまま：一覧のスクロール位置・選択中の行（👁の水色）・開いているプレビューを維持し、更新後のPDFを表示し直す
+    const _scrollEls = [document.scrollingElement, document.querySelector('.body'), document.getElementById('archiveScreen'), document.getElementById('archiveList')].filter(Boolean);
+    const _scrollKeep = _scrollEls.map(el => el.scrollTop);
+    _mvPendingRatio = _mvScrollRatio();
     closePagesEditor();
-    closePdfPreview();
     await renderArchive();
+    _scrollEls.forEach((el,i) => { el.scrollTop = _scrollKeep[i]; });
+    if(_previewArchiveId === id || document.getElementById('pdfPreviewOverlay').classList.contains('open')){
+      await previewArchiveItem(id);
+      _scrollEls.forEach((el,i) => { el.scrollTop = _scrollKeep[i]; });
+    }
   }catch(e){
     console.error('ページ編集の保存に失敗:', e);
     alert('ページ編集の保存に失敗しました: ' + e.message);
