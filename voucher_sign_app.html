@@ -432,13 +432,24 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
 #fusionFx .fx-title.go{animation:fxTitle .8s .25s cubic-bezier(.34,1.56,.64,1) forwards;}
 @keyframes fxTitle{from{opacity:0;transform:scale(2.2);}to{opacity:1;transform:scale(1);}}
 
-/* ── PC表示：PDFを開いている間だけ、左に一覧・右にPDFプレビュー ── */
+/* ── PC表示：PDFを開いている間だけ、左に一覧・右にPDFプレビュー（境界はドラッグで調整可） ── */
+:root{--list-w:560px;}
 @media (min-width:1000px){
-  body.arch-preview .body{max-width:none;margin:0;width:560px;}
+  body.arch-preview .body{max-width:none;margin:0;width:var(--list-w);}
   body.arch-preview #pdfPreviewOverlay{
-    top:var(--hdr,64px);left:560px;width:calc(100% - 560px);height:calc(100% - var(--hdr,64px));
+    top:var(--hdr,64px);left:var(--list-w);width:calc(100% - var(--list-w));height:calc(100% - var(--hdr,64px));
     background:#1e1b4b;z-index:50;border-left:1px solid #cbd5e1;}
+  body.arch-preview #splitHandle{display:flex;}
+  body.arch-preview.split-dragging #pdfPreviewBody iframe{pointer-events:none;}
+  body.arch-preview.split-dragging{cursor:col-resize;-webkit-user-select:none;user-select:none;}
 }
+#splitHandle{display:none;position:fixed;top:var(--hdr,64px);bottom:0;left:calc(var(--list-w) - 6px);width:12px;z-index:60;cursor:col-resize;align-items:center;justify-content:center;touch-action:none;}
+#splitHandle::before{content:'';width:4px;height:56px;border-radius:3px;background:#94a3b8;transition:background .15s,height .15s;}
+#splitHandle:hover::before,body.split-dragging #splitHandle::before{background:#2563eb;height:80px;}
+
+/* 👁で表示中の行をわかりやすく（水色） */
+.archive-item.previewing{background:#e0f2fe !important;box-shadow:inset 5px 0 0 #2563eb;}
+.archive-item.previewing .archive-item-preview{background:#2563eb;color:#fff;border-color:#2563eb;}
 </style>
 </head>
 <body>
@@ -558,11 +569,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.43</span>
+          <span class="version-current">v4.44</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.44</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>PC表示：一覧とプレビューの境界をドラッグして、幅を自由に調整できるように（署名済み一覧・結合ファイル共通。幅は記憶され、ダブルクリックで元に戻ります）</li>
+            <li>修正：👁を押した行の水色ハイライトが表示されない不具合を修正</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.43</span>
@@ -5660,6 +5682,26 @@ const FusionFX = (function(){
 /* PC表示：👁でPDFを開いている間だけ右側に表示。ほかの画面へ移ったら閉じる */
 (function(){
   function hdr(){ var h=document.querySelector('.header'); document.documentElement.style.setProperty('--hdr',(h?h.offsetHeight:64)+'px'); }
+  // 一覧とプレビューの境界をドラッグして幅を調整（幅は記憶する）
+  var MIN_LIST=320, MIN_PREV=360;
+  function setW(px){
+    var max = Math.max(MIN_LIST, window.innerWidth - MIN_PREV);
+    px = Math.min(Math.max(px, MIN_LIST), max);
+    document.documentElement.style.setProperty('--list-w', px+'px');
+    return px;
+  }
+  try{ var saved = parseInt(localStorage.getItem('voucher_list_w'),10); if(saved) setW(saved); }catch(e){}
+  document.addEventListener('DOMContentLoaded',function(){
+    var h=document.createElement('div'); h.id='splitHandle'; h.title='ドラッグで幅を調整（ダブルクリックで元に戻す）';
+    document.body.appendChild(h);
+    var drag=false;
+    h.addEventListener('pointerdown',function(e){ drag=true; h.setPointerCapture(e.pointerId); document.body.classList.add('split-dragging'); e.preventDefault(); });
+    h.addEventListener('pointermove',function(e){ if(drag) setW(e.clientX); });
+    function end(e){ if(!drag) return; drag=false; document.body.classList.remove('split-dragging');
+      try{ localStorage.setItem('voucher_list_w', String(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--list-w'),10))); }catch(_){} }
+    h.addEventListener('pointerup',end); h.addEventListener('pointercancel',end);
+    h.addEventListener('dblclick',function(){ setW(560); try{ localStorage.removeItem('voucher_list_w'); }catch(_){} });
+  });
   window._splitPreviewOn = function(){
     var as=document.getElementById('archiveScreen');
     var on = !!(as && as.style.display==='flex' && window.innerWidth>=1000);
@@ -5673,6 +5715,7 @@ const FusionFX = (function(){
     }).observe(as,{attributes:true,attributeFilter:['style']});
   });
   window.addEventListener('resize',function(){
+    var cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--list-w'),10)||560; setW(cur);
     if(document.getElementById('pdfPreviewOverlay').classList.contains('open')) window._splitPreviewOn();
   });
 })();
