@@ -550,11 +550,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.39</span>
+          <span class="version-current">v4.40</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.40</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>船名別フィルター（署名済み一覧・結合ファイル）に、今月の分だけを表示するように変更</li>
+            <li>一覧そのものは、これまでどおり全期間が月別に表示されます</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.39</span>
@@ -3979,6 +3990,7 @@ async function _registerPendingFiles(files, sourceId){
 // アプリ起動時に保留バナーを更新
 document.addEventListener('DOMContentLoaded', ()=>{ refreshPendingBanner(); });
 
+function _thisMonthKey(){ const n=new Date(); return `${n.getFullYear()}年${n.getMonth()+1}月`; }
 function _catTotal(c){ return c.embark + c.disembark + c.other + c.vm + c.vm_embark + c.vm_disembark; }
 let _archiveShipFilter = null; // null なら全件表示。それ以外は {ship, category} （categoryは 'embark'|'disembark'|'other'|null）
 
@@ -4339,7 +4351,7 @@ async function renderArchive(){
     if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0, vm:0, vm_embark:0, vm_disembark:0});
     m.get(ship)[cat]++;
   }
-  const sortedMonthKeys = [...byMonthShip.keys()].sort((a,b)=>{
+  const sortedMonthKeys = [...byMonthShip.keys()].filter(k => k === _thisMonthKey()).sort((a,b)=>{
     // "2026年11月" 形式から比較
     const toNum = s => { const m=s.match(/(\d+)年(\d+)月/); return m?parseInt(m[1])*100+parseInt(m[2]):0; };
     return toNum(b)-toNum(a);
@@ -4348,7 +4360,9 @@ async function renderArchive(){
   const shipSummary = document.getElementById('archiveShipSummary');
   const shipBody = document.getElementById('archiveShipBody');
   shipSummary.style.display = 'block';  // 署名済み一覧・結合ファイルの両方で船名別フィルターを表示
-  shipBody.innerHTML = sortedMonthKeys.map(monthKey => {
+  const _noThisMonth = sortedMonthKeys.length === 0
+    ? `<div style="padding:10px 4px;font-size:12.5px;color:#94a3b8;">今月（${_thisMonthKey()}）の分はありません</div>` : '';
+  shipBody.innerHTML = _noThisMonth + sortedMonthKeys.map(monthKey => {
     const shipMap = byMonthShip.get(monthKey);
     const sortedShips = [...shipMap.entries()].sort((a,b)=>{
       const ta = _catTotal(a[1]);
