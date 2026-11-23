@@ -339,6 +339,9 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-ship-cat.vm{background:#fef3c7;color:#b45309;}
 .archive-ship-cat.vm_embark{background:#ffedd5;color:#c2410c;border-color:#fdba74;}
 .archive-ship-cat.vm_disembark{background:#e0f2fe;color:#0369a1;border-color:#7dd3fc;}
+.archive-ship-cat.rk{background:#ccfbf1;color:#0f766e;border-color:#5eead4;}
+.archive-ship-cat.rk_embark{background:#ccfbf1;color:#0f766e;border-color:#5eead4;}
+.archive-ship-cat.rk_disembark{background:#ede9fe;color:#6d28d9;border-color:#c4b5fd;}
 .archive-ship-cat.other{background:#f1f5f9;color:#475569;}
 .archive-ship-cat.active{border-color:#2563eb;box-shadow:0 0 0 1.5px #bfdbfe;}
 .archive-empty{text-align:center;padding:40px 20px;color:#94a3b8;}
@@ -441,12 +444,12 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
     background:#1e1b4b;z-index:50;border-left:1px solid #cbd5e1;}
   body.arch-preview #splitHandle{display:flex;}
   body.arch-solo .body{max-width:none;width:var(--solo-w);}
-  body.arch-solo #splitHandle{display:flex;left:calc(50% + var(--solo-w)/2 - 6px);}
+  body.arch-solo #splitHandle{display:flex;left:calc(50% + var(--solo-w)/2 - 9px);}
   body.arch-solo.split-dragging{cursor:col-resize;-webkit-user-select:none;user-select:none;}
   body.arch-preview.split-dragging #pdfPreviewBody iframe{pointer-events:none;}
   body.arch-preview.split-dragging{cursor:col-resize;-webkit-user-select:none;user-select:none;}
 }
-#splitHandle{display:none;position:fixed;top:var(--hdr,64px);bottom:0;left:calc(var(--list-w) - 6px);width:12px;z-index:60;cursor:col-resize;align-items:center;justify-content:center;touch-action:none;}
+#splitHandle{display:none;position:fixed;top:var(--hdr,64px);bottom:0;left:calc(var(--list-w) - 9px);width:18px;z-index:60;cursor:col-resize;align-items:center;justify-content:center;touch-action:none;}
 #splitHandle::before{content:'';width:4px;height:56px;border-radius:3px;background:#94a3b8;transition:background .15s,height .15s;}
 #splitHandle:hover::before,body.split-dragging #splitHandle::before{background:#2563eb;height:80px;}
 
@@ -572,11 +575,31 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.45</span>
+          <span class="version-current">v4.47</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.47</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>修正：一覧とプレビューの境界をドラッグしても動かない場合があった問題を強化（ドラッグ中は画面全体でマウスを受け取るように変更し、つまみの当たり判定も広げました）</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.46</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ランク別フィルター：PDFにD-CDT／E-CDTの記載があるものは、VMと同様に専用のフィルター（例：D-CDT乗船／D-CDT下船）に分けて表示。署名済み一覧・結合ファイル共通（既存PDFも初回表示時に自動で判定します）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.45</span>
@@ -3165,7 +3188,8 @@ function _voucherIndexMeta(data){
     checksum: data.checksum || null,
     confirmed: !!data.confirmed,
     chunks: data.pdfChunkCount || 0,   // 大きなPDFを分割保存している場合の分割数
-    isVM: (data.isVM === undefined || data.isVM === null) ? null : !!data.isVM  // PDF内に「VM」の記載があるか（null=未判定）
+    isVM: (data.isVM === undefined || data.isVM === null) ? null : !!data.isVM,  // PDF内に「VM」の記載があるか（null=未判定）
+    ranks: Array.isArray(data.ranks) ? data.ranks : null  // PDF内のランク記載（例：['D-CDT']。null=未判定、[]=該当なし）
   };
 }
 
@@ -3308,11 +3332,45 @@ async function _detectVM(bytes){
   }
 }
 
+// ランク別フィルター用：PDF内にこの表記があれば専用フィルターを作る。ランクを増やすときはここに1行足すだけ
+const RANK_DEFS = [
+  { key:'D-CDT', re:/(?:^|[^A-Za-z])D\s?-?\s?CDT(?![A-Za-z])/ },
+  { key:'E-CDT', re:/(?:^|[^A-Za-z])E\s?-?\s?CDT(?![A-Za-z])/ }
+];
+// PDF本文を調べて {vm:VM記載の有無, ranks:該当ランク一覧} を返す（失敗時 null）
+async function _detectFlags(bytes){
+  try{
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const doc = await pdfjsLib.getDocument({data:u8.slice(), stopAtErrors:false}).promise;
+    const n = Math.min(doc.numPages, 20);
+    let vm = false; const found = new Set();
+    for(let i=1;i<=n;i++){
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map(it=>it.str).join(' ');
+      if(/\bVM\b/.test(text)) vm = true;
+      for(const d of RANK_DEFS){ if(d.re.test(text)) found.add(d.key); }
+    }
+    return { vm, ranks: RANK_DEFS.map(d=>d.key).filter(k=>found.has(k)) };
+  }catch(e){ console.warn('PDF判定失敗:', e); return null; }
+}
+
 // 一覧用の区分：PDFにVM記載があれば 'vm_embark'(VM乗船)/'vm_disembark'(VM下船)/'vm'(区分不明のVM)、なければファイル名から 乗船/下船/他
 function _recCat(r){
   const base = extractCategory(r.filename);
   if(!r.isVM) return base;
   return base === 'embark' ? 'vm_embark' : base === 'disembark' ? 'vm_disembark' : 'vm';
+}
+// ランク（D-CDTなど）の区分キー：'D-CDT_embark' / 'D-CDT_disembark' / 'D-CDT'
+function _rankCatKey(rank, base){ return base === 'embark' ? rank+'_embark' : base === 'disembark' ? rank+'_disembark' : rank; }
+// 1件が属する区分の一覧（VM・ランク該当がなければ 乗船/下船/他 の1つ。ランク該当は専用の区分にも入る）
+function _recCats(r){
+  const base = extractCategory(r.filename);
+  const cats = [];
+  if(r.isVM) cats.push(_recCat(r));
+  for(const k of (r.ranks||[])) cats.push(_rankCatKey(k, base));
+  if(cats.length === 0) cats.push(base);
+  return cats;
 }
 
 async function saveToArchive(pdfBytes, filename, type, customDate, opts){
@@ -3361,8 +3419,8 @@ async function saveToArchive(pdfBytes, filename, type, customDate, opts){
       checksum,  // 重複検知用チェックサム
       dateOnly: !!customDate  // 日付のみフラグ
     };
-    const vmFlag = await _detectVM(bytes);
-    if(vmFlag !== null) record.isVM = vmFlag;
+    const flags = await _detectFlags(bytes);
+    if(flags){ record.isVM = flags.vm; record.ranks = flags.ranks; }
     if(opts.extra) Object.assign(record, opts.extra);
     const docRef = db.collection('vouchers').doc();
     if(pdfBase64.length + filename.length + 300 > INLINE_LIMIT){
@@ -4065,7 +4123,7 @@ async function _registerPendingFiles(files, sourceId){
 document.addEventListener('DOMContentLoaded', ()=>{ refreshPendingBanner(); });
 
 function _thisMonthKey(){ const n=new Date(); return `${n.getFullYear()}年${n.getMonth()+1}月`; }
-function _catTotal(c){ return c.embark + c.disembark + c.other + c.vm + c.vm_embark + c.vm_disembark; }
+function _catTotal(c){ return c.n; }  // 1件が複数の区分（VM・ランク）に入ることがあるため、件数は別カウント
 let _archiveShipFilter = null; // null なら全件表示。それ以外は {ship, category} （categoryは 'embark'|'disembark'|'other'|null）
 
 // 現在のフィルター（船名別件数の絞り込み）を records に適用する共通処理
@@ -4073,7 +4131,7 @@ let _archiveShipFilter = null; // null なら全件表示。それ以外は {shi
 function _applyShipFilter(records){
   return _archiveShipFilter
     ? records.filter(r => extractShipName(r.filename) === _archiveShipFilter.ship
-        && (_archiveShipFilter.category == null || _recCat(r) === _archiveShipFilter.category))
+        && (_archiveShipFilter.category == null || _recCats(r).includes(_archiveShipFilter.category)))
     : records;
 }
 
@@ -4420,10 +4478,10 @@ async function renderArchive(){
     const monthKey = `${d.getFullYear()}年${d.getMonth()+1}月`;
     if(!byMonthShip.has(monthKey)) byMonthShip.set(monthKey, new Map());
     const ship = extractShipName(r.filename);
-    const cat = _recCat(r);
     const m = byMonthShip.get(monthKey);
-    if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0, vm:0, vm_embark:0, vm_disembark:0});
-    m.get(ship)[cat]++;
+    if(!m.has(ship)) m.set(ship, {n:0, embark:0, disembark:0, other:0, vm:0, vm_embark:0, vm_disembark:0});
+    const cnt = m.get(ship); cnt.n++;
+    for(const cat of _recCats(r)) cnt[cat] = (cnt[cat]||0) + 1;
   }
   const sortedMonthKeys = [...byMonthShip.keys()].filter(k => k === _thisMonthKey()).sort((a,b)=>{
     // "2026年11月" 形式から比較
@@ -4456,6 +4514,11 @@ async function renderArchive(){
           if(c.vm_embark>0) tags.push(`<span class="archive-ship-cat vm_embark${isActive('vm_embark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm_embark')">VM乗船 ${c.vm_embark}件</span>`);
           if(c.vm_disembark>0) tags.push(`<span class="archive-ship-cat vm_disembark${isActive('vm_disembark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm_disembark')">VM下船 ${c.vm_disembark}件</span>`);
           if(c.vm>0) tags.push(`<span class="archive-ship-cat vm${isActive('vm')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm')">VM ${c.vm}件</span>`);
+          for(const d of RANK_DEFS){
+            [[d.key+'_embark', d.key+'乗船', 'rk_embark'], [d.key+'_disembark', d.key+'下船', 'rk_disembark'], [d.key, d.key, 'rk']].forEach(([ck,label,cls])=>{
+              if((c[ck]||0)>0) tags.push(`<span class="archive-ship-cat ${cls}${isActive(ck)?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','${ck}')">${label} ${c[ck]}件</span>`);
+            });
+          }
           if(c.other>0) tags.push(`<span class="archive-ship-cat other${isActive('other')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','other')">他 ${c.other}件</span>`);
           return `
           <div class="archive-ship-row">
@@ -4539,7 +4602,7 @@ let _vmBackfillRunning = false;
 // VM判定が未実施の既存PDFを順番に判定してインデックスに記録（初回のみ時間がかかる）
 async function _backfillVMFlags(records){
   if(_vmBackfillRunning) return;
-  const todo = records.filter(r => r.isVM === null || r.isVM === undefined);
+  const todo = records.filter(r => r.isVM === null || r.isVM === undefined || !Array.isArray(r.ranks));
   if(todo.length === 0) return;
   _vmBackfillRunning = true;
   const label = document.getElementById('archiveSecLabel');
@@ -4548,14 +4611,14 @@ async function _backfillVMFlags(records){
   try{
     const db = await getFirestore();
     for(let i=0;i<todo.length;i++){
-      if(label) label.textContent = `${baseText}（VM判定中 ${i+1}/${todo.length}）`;
+      if(label) label.textContent = `${baseText}（判定中 ${i+1}/${todo.length}）`;
       const r = await getArchiveById(todo[i].id);
       if(!r || !r.pdfBase64) continue;
-      const flag = await _detectVM(base64ToUint8(r.pdfBase64));
-      if(flag === null) continue;
-      await db.collection('vouchers').doc(r.id).update({ isVM: flag });
-      await _patchVoucherIndexFields(r.id, { isVM: flag });
-      if(flag) changed++;
+      const fl = await _detectFlags(base64ToUint8(r.pdfBase64));
+      if(fl === null) continue;
+      await db.collection('vouchers').doc(r.id).update({ isVM: fl.vm, ranks: fl.ranks });
+      await _patchVoucherIndexFields(r.id, { isVM: fl.vm, ranks: fl.ranks });
+      if(fl.vm || fl.ranks.length) changed++;
     }
   }catch(e){ console.warn('VM判定の一括処理に失敗:', e); }
   _vmBackfillRunning = false;
@@ -5080,9 +5143,9 @@ async function savePagesEditor(){
         try{ await db.collection('vouchers_chunks').doc(`${id}_${i}`).delete(); }catch(e){}
       }
     }
-    const newVM = await _detectVM(outBytes);
-    if(newVM !== null){ await db.collection('vouchers').doc(id).update({ isVM: newVM }); }
-    await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newVM });
+    const newFl = await _detectFlags(outBytes);
+    if(newFl !== null){ await db.collection('vouchers').doc(id).update({ isVM: newFl.vm, ranks: newFl.ranks }); }
+    await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newFl ? newFl.vm : null, ranks: newFl ? newFl.ranks : null });
 
     alert(`${markedPages.size}ページをゴミ箱に移動しました（残り${pageCount - markedPages.size}ページ）`);
     closePagesEditor();
@@ -5721,14 +5784,29 @@ const FusionFX = (function(){
   document.addEventListener('DOMContentLoaded',function(){
     var h=document.createElement('div'); h.id='splitHandle'; h.title='ドラッグで幅を調整（ダブルクリックで元に戻す）';
     document.body.appendChild(h);
-    var drag=false;
-    h.addEventListener('pointerdown',function(e){ drag=true; h.setPointerCapture(e.pointerId); document.body.classList.add('split-dragging'); e.preventDefault(); });
-    h.addEventListener('pointermove',function(e){ if(!drag) return;
-      if(document.body.classList.contains('arch-solo')) setSolo(2*(e.clientX - window.innerWidth/2)); else setW(e.clientX); });
-    function end(e){ if(!drag) return; drag=false; document.body.classList.remove('split-dragging');
+    var drag=false, shield=null;
+    function onMove(e){ if(!drag) return;
+      if(document.body.classList.contains('arch-solo')) setSolo(2*(e.clientX - window.innerWidth/2)); else setW(e.clientX); }
+    function end(e){ if(!drag) return; drag=false;
+      document.body.classList.remove('split-dragging');
+      if(shield){ shield.remove(); shield=null; }
+      window.removeEventListener('pointermove',onMove,true); window.removeEventListener('pointerup',end,true); window.removeEventListener('pointercancel',end,true);
+      window.removeEventListener('mousemove',onMove,true); window.removeEventListener('mouseup',end,true);
       try{ if(document.body.classList.contains('arch-solo')) localStorage.setItem('voucher_solo_w', String(cssPx('--solo-w')));
            else localStorage.setItem('voucher_list_w', String(cssPx('--list-w'))); }catch(_){} }
-    h.addEventListener('pointerup',end); h.addEventListener('pointercancel',end);
+    function start(e){
+      if(drag) return; if(e.button!==undefined && e.button!==0) return;
+      drag=true; document.body.classList.add('split-dragging');
+      // 画面全体を透明な膜で覆う：PDFプレビュー（別プロセスの埋め込み）の上でもマウス操作を取りこぼさない
+      shield=document.createElement('div');
+      shield.style.cssText='position:fixed;inset:0;z-index:2147483647;cursor:col-resize;background:transparent;';
+      document.body.appendChild(shield);
+      window.addEventListener('pointermove',onMove,true); window.addEventListener('pointerup',end,true); window.addEventListener('pointercancel',end,true);
+      window.addEventListener('mousemove',onMove,true); window.addEventListener('mouseup',end,true);
+      e.preventDefault();
+    }
+    h.addEventListener('pointerdown',start);
+    h.addEventListener('mousedown',start);   // pointerdownが来ない環境の保険（二重起動は start 内で防止）
     h.addEventListener('dblclick',function(){
       if(document.body.classList.contains('arch-solo')){ setSolo(880); try{ localStorage.removeItem('voucher_solo_w'); }catch(_){} }
       else { setW(560); try{ localStorage.removeItem('voucher_list_w'); }catch(_){} } });
