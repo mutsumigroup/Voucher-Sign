@@ -550,11 +550,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.38</span>
+          <span class="version-current">v4.39</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.39</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合ファイル画面にも、署名済み一覧と同じ「船名別 件数」フィルター（乗船／下船／VM乗船／VM下船）を追加</li>
+            <li>結合ファイル名の「_他○件_merged」部分を船名の判定から除外し、船名を正しく分類</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.38</span>
@@ -3983,12 +3994,17 @@ function _applyShipFilter(records){
 function extractShipName(filename){
   // ファイル名から船名を抽出：「SHIP_NAME_Category_JPY...」形式
   // Category候補: Embark, Disembark, Embarkation, Disembarkation など
-  const m = filename.replace(/\.pdf$/i,'').match(/^(.+?)_(Embark|Disembark|Sign|Receipt|JPY|\d)/i);
+  // 結合ファイル名の「_他2件_merged」部分は船名判定から除く
+  const fn0 = filename.replace(/\.pdf$/i,'').replace(/_他\d+件.*$/,'').replace(/_merged.*$/i,'');
+  const m = fn0.match(/^(.+?)_(Embark|Disembark|Sign|Receipt|JPY|\d)/i);
   if(m) return m[1].replace(/_/g,' ').trim();
+  // 区分語がファイル名の途中にある場合（例：「SEISYU MARU navies disembark」）
+  const m2 = fn0.match(/^(.+?)[ _]+(?:navies[ _]+)?(?:Embark|Disembark)/i);
+  if(m2) return m2[1].replace(/_/g,' ').trim();
   // アンダースコア区切りの先頭2〜3単語
-  const parts = filename.replace(/\.pdf$/i,'').split('_');
+  const parts = fn0.split('_');
   if(parts.length >= 2) return parts.slice(0, Math.min(3, parts.length-1)).join(' ');
-  return filename.replace(/\.pdf$/i,'');
+  return fn0;
 }
 
 // ファイル名から「乗船（Embark）」「下船（Disembark）」を判定（どちらでもなければ 'other'）
@@ -4331,7 +4347,7 @@ async function renderArchive(){
 
   const shipSummary = document.getElementById('archiveShipSummary');
   const shipBody = document.getElementById('archiveShipBody');
-  shipSummary.style.display = (_archiveView === 'merged') ? 'none' : 'block';
+  shipSummary.style.display = 'block';  // 署名済み一覧・結合ファイルの両方で船名別フィルターを表示
   shipBody.innerHTML = sortedMonthKeys.map(monthKey => {
     const shipMap = byMonthShip.get(monthKey);
     const sortedShips = [...shipMap.entries()].sort((a,b)=>{
