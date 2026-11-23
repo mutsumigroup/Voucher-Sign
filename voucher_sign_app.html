@@ -550,11 +550,23 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.37</span>
+          <span class="version-current">v4.38</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.38</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>プレビューの「ページ編集」で削除したページも、ゴミ箱に入るように修正（ゴミ箱から別ファイルとして元に戻せます）</li>
+            <li>ゴミ箱に保存できなかった場合は、ページを削除しません</li>
+            <li>結合ファイルのページを削除しても、「元に戻す」が正しく動くように記録を更新</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.37</span>
@@ -4882,7 +4894,7 @@ async function savePagesEditor(){
     alert('全ページは削除できません');
     return;
   }
-  if(!confirm(`${markedPages.size}ページを削除します。元に戻せません。よろしいですか？`)) return;
+  if(!confirm(`${markedPages.size}ページを削除します。\n（削除したページはホームの「ゴミ箱」に入り、あとから元に戻せます）`)) return;
 
   const saveBtn = document.getElementById('pageEditorSaveBtn');
   saveBtn.disabled = true;
@@ -4901,6 +4913,23 @@ async function savePagesEditor(){
     const out = await newDoc.save();
     const outBytes = new Uint8Array(out);
 
+    // ── 削除するページを先に「ゴミ箱」へ保存（保存できなければ削除しない） ──
+    const delIndexes = []; for(let i=0;i<pageCount;i++){ if(markedPages.has(i+1)) delIndexes.push(i); }
+    const trashDoc = await PDFLib.PDFDocument.create();
+    (await trashDoc.copyPages(srcDoc, delIndexes)).forEach(pg => trashDoc.addPage(pg));
+    const trashBytes = new Uint8Array(await trashDoc.save());
+    {
+      const dbT = await getFirestore();
+      const tRef = dbT.collection('vouchers').doc();
+      const tB64 = uint8ToBase64(trashBytes);
+      const tName = `${String(filename||'file').replace(/\.pdf$/i,'')}_削除ページ(${delIndexes.map(i=>'p'+(i+1)).join(',')}).pdf`;
+      const tRec = { filename: tName, type:'trash', origType:'sign', savedAt:new Date().toISOString(), deletedAt:new Date().toISOString(),
+                     checksum:_pdfChecksum(trashBytes), dateOnly:false, fromId:id };
+      if(tB64.length + tName.length + 400 > INLINE_LIMIT){ tRec.pdfChunkCount = await _writeChunks(dbT, tRef.id, tB64); }
+      else { tRec.pdfBase64 = tB64; }
+      await tRef.set(tRec);
+    }
+
     // Firestore上の該当レコードを上書き保存（チェックサム・インデックスも更新）
     const newChecksum = _pdfChecksum(outBytes);
     const newPdfBase64 = uint8ToBase64(outBytes);
@@ -4915,6 +4944,20 @@ async function savePagesEditor(){
     } else {
       fields = { pdfBase64: newPdfBase64, pdfChunkCount: FV.delete(), checksum: newChecksum };
     }
+    // 結合ファイルの場合：「元に戻す」用の記録も、削除したページ分を反映する
+    try{
+      const curDoc = await db.collection('vouchers').doc(id).get();
+      const mp = curDoc.exists ? curDoc.data().mergeParts : null;
+      if(Array.isArray(mp) && mp.reduce((a,x)=>a+(x.pages||0),0) === pageCount){
+        let at = 0; const np = [];
+        for(const x of mp){
+          let cnt = 0; for(let q=at+1;q<=at+x.pages;q++){ if(!markedPages.has(q)) cnt++; }
+          at += x.pages;
+          if(cnt > 0) np.push({ ...x, pages: cnt });
+        }
+        fields.mergeParts = np;
+      }
+    }catch(e){ console.warn('mergeParts更新失敗（無視）:', e); }
     await db.collection('vouchers').doc(id).update(fields);
     // 以前の分割データが不要になった分を削除
     if(oldChunks > newChunks){
@@ -4926,7 +4969,7 @@ async function savePagesEditor(){
     if(newVM !== null){ await db.collection('vouchers').doc(id).update({ isVM: newVM }); }
     await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newVM });
 
-    alert(`${markedPages.size}ページを削除しました（残り${pageCount - markedPages.size}ページ）`);
+    alert(`${markedPages.size}ページをゴミ箱に移動しました（残り${pageCount - markedPages.size}ページ）`);
     closePagesEditor();
     closePdfPreview();
     await renderArchive();
