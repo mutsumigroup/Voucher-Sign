@@ -247,7 +247,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-item-check.checked{background:#7c3aed;border-color:#7c3aed;}
 .archive-item-check.checked::after{content:'✓';color:#fff;font-size:13px;font-weight:900;}
 .archive-item-info{flex:1 1 140px;min-width:0;cursor:pointer;}
-.archive-item-name{font-size:13px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.archive-item-name{font-size:13px;font-weight:700;color:#1e293b;white-space:normal;word-break:break-all;overflow:visible;line-height:1.35;}
 .archive-item-meta{font-size:11px;color:#64748b;margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap;}
 .archive-item-type{padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;}
 .archive-item-type.sign{background:#dbeafe;color:#1d4ed8;}
@@ -431,6 +431,17 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
 #fusionFx .fx-title{position:absolute;top:14%;left:0;right:0;text-align:center;font-size:30px;font-weight:900;letter-spacing:.2em;color:#fde68a;opacity:0;text-shadow:0 0 18px #f59e0b,0 2px 0 #92400e;}
 #fusionFx .fx-title.go{animation:fxTitle .8s .25s cubic-bezier(.34,1.56,.64,1) forwards;}
 @keyframes fxTitle{from{opacity:0;transform:scale(2.2);}to{opacity:1;transform:scale(1);}}
+
+/* ── PC表示：左に一覧、右にPDFプレビュー ── */
+@media (min-width:1000px){
+  body.arch-split .body{max-width:none;margin:0;width:560px;}
+  body.arch-split #pdfPreviewOverlay{visibility:visible !important;opacity:1 !important;pointer-events:auto !important;
+    top:var(--hdr,64px);left:560px;width:calc(100% - 560px);height:calc(100% - var(--hdr,64px));
+    background:#1e1b4b;z-index:50;border-left:1px solid #cbd5e1;}
+  body.arch-split #pdfPreviewOverlay.no-doc #pdfPreviewDlBtn,
+  body.arch-split #pdfPreviewOverlay.no-doc #pdfPreviewCloseBtn{display:none;}
+}
+#pdfPreviewPlaceholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#a5b4fc;font-size:14px;font-weight:700;text-align:center;padding:24px;}
 </style>
 </head>
 <body>
@@ -550,11 +561,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.40</span>
+          <span class="version-current">v4.41</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.41</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>PC表示：署名済み一覧・結合ファイルを開くと、左に一覧、右にPDFプレビューを常時表示（👁を押すと右に表示）</li>
+            <li>ファイル名を省略せず、全文を表示（長い場合は折り返し）。スマホも同様</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.40</span>
@@ -4801,6 +4823,7 @@ function _openPdfPreviewFromBytes(bytes, filename){
       body.appendChild(iframe);
     }
 
+    overlay.classList.remove('no-doc');
     overlay.classList.add('open');
   }catch(e){
     alert('プレビューに失敗しました: ' + e.message);
@@ -4812,7 +4835,10 @@ function closePdfPreview(){
   document.getElementById('pdfPreviewBody').innerHTML = '';
   if(_previewBlobUrl){ URL.revokeObjectURL(_previewBlobUrl); _previewBlobUrl = null; }
   _previewArchiveId = null;
+  // PC表示（左右分割）では、閉じたら右側を「選択待ち」の表示に戻す
+  if(document.body.classList.contains('arch-split') && window._showSplitPlaceholder) window._showSplitPlaceholder();
 }
+window._previewBlobUrlActive = function(){ return !!_previewBlobUrl; };
 
 function pdfPreviewDownload(){
   if(!_previewBlobUrl) return;
@@ -5604,6 +5630,38 @@ const FusionFX = (function(){
     setTimeout(()=>{ try{e.remove();}catch(_){} },400);
   }
   return {start};
+})();
+</script>
+<script>
+/* PC表示：署名済み一覧／結合ファイルを開いている間は、右側にPDFプレビューを常時表示する */
+(function(){
+  function placeholder(){
+    var ov=document.getElementById('pdfPreviewOverlay'), body=document.getElementById('pdfPreviewBody');
+    if(!ov||!body) return;
+    ov.classList.add('no-doc');
+    document.getElementById('pdfPreviewTitle').textContent='';
+    ['pdfPreviewEditBtn','pdfPreviewMoveBtn','pdfPreviewUnmergeBtn'].forEach(function(id){ var b=document.getElementById(id); if(b) b.style.display='none'; });
+    body.innerHTML='<div id="pdfPreviewPlaceholder"><div style="font-size:44px;">📄</div><div>左の一覧の「👁」を押すと、<br>ここにPDFが表示されます</div></div>';
+  }
+  window._showSplitPlaceholder = placeholder;
+  var was=false;
+  function sync(){
+    var as=document.getElementById('archiveScreen');
+    var on = !!(as && as.style.display==='flex' && window.innerWidth>=1000);
+    document.body.classList.toggle('arch-split', on);
+    var h=document.querySelector('.header');
+    document.documentElement.style.setProperty('--hdr',(h?h.offsetHeight:64)+'px');
+    if(on && !was){ if(!window._previewBlobUrlActive || !window._previewBlobUrlActive()) placeholder(); }
+    if(!on && was){ try{ closePdfPreview(); }catch(e){} }
+    was=on;
+  }
+  window._syncArchiveSplit = sync;
+  document.addEventListener('DOMContentLoaded',function(){
+    var as=document.getElementById('archiveScreen');
+    if(as) new MutationObserver(sync).observe(as,{attributes:true,attributeFilter:['style']});
+    sync();
+  });
+  window.addEventListener('resize',sync);
 })();
 </script>
 </body>
