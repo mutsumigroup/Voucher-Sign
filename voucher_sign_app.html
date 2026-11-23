@@ -263,6 +263,19 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
   .archive-item-actions{order:2;flex-basis:100%;justify-content:flex-end;margin-top:4px;}
   .archive-item-confirm,.archive-item-rename,.archive-item-preview,.archive-item-del{padding:6px 8px;font-size:12px;}
 }
+.archive-item-more{display:none;padding:6px 12px;border-radius:8px;border:1.5px solid #cbd5e1;background:#fff;color:#475569;font-size:15px;font-weight:900;line-height:1;cursor:pointer;white-space:nowrap;}
+.archive-item-more:active,.archive-item.more-open .archive-item-more{background:#e2e8f0;}
+/* スマホ：一覧の1件を低くする（✅と👁だけ表示し、✏️🧾📁🗑は「⋯」を押したときだけ出す） */
+@media (max-width:999px){
+  .archive-item{flex-wrap:wrap;gap:8px;padding:10px 12px;}
+  .archive-item-check{order:0;}
+  .archive-item-info{flex:1 1 0;flex-basis:0;min-width:0;order:1;}
+  .archive-item-actions{order:2;flex-basis:auto;margin-top:0;justify-content:flex-end;}
+  .archive-item .act-x{display:none;}
+  .archive-item-more{display:inline-flex;align-items:center;}
+  .archive-item.more-open .archive-item-actions{order:3;flex-basis:100%;flex-wrap:wrap;}
+  .archive-item.more-open .act-x{display:inline-block;}
+}
 .archive-item-confirm{padding:6px 10px;border-radius:8px;border:1.5px solid #d1dce8;background:#fff;color:#d1dce8;font-size:14px;cursor:pointer;white-space:nowrap;transition:all .15s;}
 .archive-item-confirm.confirmed{border-color:#16a34a;background:#dcfce7;filter:none;}
 .archive-item-confirm:not(.confirmed){filter:grayscale(1);opacity:0.4;}
@@ -575,11 +588,24 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.47</span>
+          <span class="version-current">v4.48</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.48</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>スマホ：👁をワンタップでPDFが開くように（「PDFを開く」画面を廃止し、アプリ内で表示。＋／−ボタンとピンチで拡大縮小できます）</li>
+            <li>スマホ：👁を押した行は水色になり、PDFを閉じた後も残る（最後に開いた行が分かる）</li>
+            <li>スマホ：一覧は✅と👁だけ表示し、✏️🧾📁🗑は「⋯」を押すと出る形にして1件の高さを縮小</li>
+            <li>署名済み一覧・結合ファイル共通</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.47</span>
@@ -4715,11 +4741,12 @@ function renderArchiveItem(r){
       </div>
       <div class="archive-item-actions">
         <button class="archive-item-confirm${confirmed?' confirmed':''}" onclick="toggleConfirmed('${r.id}', ${confirmed})" title="${confirmed?'確認済み':'未確認'}">✅</button>
-        <button class="archive-item-rename" onclick="startRenameArchive('${r.id}')" title="ファイル名・日付を変更">✏️</button>
-        <button class="archive-item-rename" style="border-color:#f59e0b;color:#d97706;" onclick="attachReceiptFromArchive('${r.id}')" title="領収書を添付">🧾</button>
-        ${r.type!=='merged' ? `<button class="archive-item-rename" style="border-color:#7c3aed;color:#7c3aed;" onclick="moveToMergedFiles(['${r.id}'])" title="結合ファイルに移動">📁</button>` : ''}
+        <button class="archive-item-rename act-x" onclick="startRenameArchive('${r.id}')" title="ファイル名・日付を変更">✏️</button>
+        <button class="archive-item-rename act-x" style="border-color:#f59e0b;color:#d97706;" onclick="attachReceiptFromArchive('${r.id}')" title="領収書を添付">🧾</button>
+        ${r.type!=='merged' ? `<button class="archive-item-rename act-x" style="border-color:#7c3aed;color:#7c3aed;" onclick="moveToMergedFiles(['${r.id}'])" title="結合ファイルに移動">📁</button>` : ''}
         <button class="archive-item-preview" onclick="previewArchiveItem('${r.id}')">👁</button>
-        <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
+        <button class="archive-item-del act-x" onclick="deleteSingleArchive('${r.id}')">🗑</button>
+        <button class="archive-item-more" onclick="toggleItemMore('${r.id}')" title="その他の操作（編集・領収書・ゴミ箱）">⋯</button>
       </div>
     </div>
     <div class="archive-rename-form" id="rename_form_${r.id}" style="display:none;">
@@ -4878,6 +4905,98 @@ async function downloadArchiveItem(id){
   }
 }
 
+function toggleItemMore(id){ const el = document.getElementById('aitem_' + id); if(el) el.classList.toggle('more-open'); }
+
+/* ── スマホ用PDFビューア：iPhone等はiframeでPDFを表示できないため、アプリ内で描画してワンタップで開く ── */
+let _mvDoc = null, _mvZoom = 1, _mvKey = '';
+function _useInAppViewer(){
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) || window.innerWidth < 1000;
+}
+function _mvCleanup(){ try{ if(_mvDoc) _mvDoc.destroy(); }catch(e){} _mvDoc = null; _mvZoom = 1; }
+async function _openMobileViewer(body, bytes){
+  _mvCleanup();
+  body.innerHTML = '';
+  body.style.display = 'flex';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'flex:1;position:relative;min-width:0;';
+  const sc = document.createElement('div');
+  sc.style.cssText = 'position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;background:#525659;';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'width:100%;padding:8px 0 80px;';
+  inner.innerHTML = '<div style="color:#e2e8f0;text-align:center;padding:40px 0;font-size:13px;">読み込み中…</div>';
+  sc.appendChild(inner); wrap.appendChild(sc);
+  const ctl = document.createElement('div');
+  ctl.style.cssText = 'position:absolute;right:12px;bottom:16px;display:flex;align-items:center;gap:6px;background:rgba(15,23,42,.82);border-radius:22px;padding:6px 8px;z-index:5;';
+  const mk = (t, f) => { const b = document.createElement('button'); b.textContent = t; b.onclick = f;
+    b.style.cssText = 'width:38px;height:34px;border-radius:17px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:18px;font-weight:800;cursor:pointer;'; return b; };
+  const lab = document.createElement('span'); lab.style.cssText = 'color:#fff;font-size:12px;font-weight:700;min-width:40px;text-align:center;'; lab.textContent = '100%';
+  ctl.appendChild(mk('−', () => setZoom(_mvZoom / 1.3))); ctl.appendChild(lab); ctl.appendChild(mk('＋', () => setZoom(_mvZoom * 1.3)));
+  wrap.appendChild(ctl);
+  body.appendChild(wrap);
+
+  const pages = [];
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  function near(div){ const a = div.getBoundingClientRect(), b = sc.getBoundingClientRect(); return a.bottom > b.top - 700 && a.top < b.bottom + 700; }
+  async function renderPage(div){
+    const key = _mvKey = _mvZoom.toFixed(2);
+    if(div._key === key || div._busy) return;
+    div._busy = true;
+    try{
+      const page = await _mvDoc.getPage(div._n);
+      const vp1 = page.getViewport({scale:1});
+      const w = Math.max(div.clientWidth, 100);
+      const scale = Math.min(w * dpr / vp1.width, 3000 / vp1.width);
+      const vp = page.getViewport({scale});
+      const cv = document.createElement('canvas'); cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
+      cv.style.cssText = 'display:block;width:100%;height:100%;';
+      await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
+      if(div._canvas) div._canvas.remove();
+      div.appendChild(cv); div._canvas = cv; div._key = key;
+    }catch(e){ console.warn('page render', e); }
+    div._busy = false;
+    if(div._key !== _mvKey && near(div)) renderPage(div);   // 描画中に倍率が変わっていたら描き直す
+  }
+  function refresh(){
+    for(const d of pages){
+      if(near(d)){ if(d._key !== _mvZoom.toFixed(2)) renderPage(d); }
+      else if(d._canvas){ d._canvas.remove(); d._canvas = null; d._key = null; }   // 遠いページはメモリ節約のため破棄
+    }
+  }
+  function setZoom(z){
+    z = Math.min(4, Math.max(1, z));
+    const cx = (sc.scrollLeft + sc.clientWidth/2) / Math.max(sc.scrollWidth,1), cy = (sc.scrollTop + sc.clientHeight/2) / Math.max(sc.scrollHeight,1);
+    _mvZoom = z; inner.style.width = (z*100) + '%'; lab.textContent = Math.round(z*100) + '%';
+    sc.scrollLeft = cx * sc.scrollWidth - sc.clientWidth/2; sc.scrollTop = cy * sc.scrollHeight - sc.clientHeight/2;
+    clearTimeout(setZoom._t); setZoom._t = setTimeout(refresh, 120);
+  }
+  // ピンチ操作で拡大・縮小
+  let d0 = 0, z0 = 1;
+  sc.addEventListener('touchstart', e => { if(e.touches.length === 2){ d0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); z0 = _mvZoom; } }, {passive:true});
+  sc.addEventListener('touchmove', e => { if(e.touches.length === 2 && d0){ e.preventDefault();
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); setZoom(z0 * d / d0); } }, {passive:false});
+  sc.addEventListener('touchend', () => { d0 = 0; });
+  let tick = false;
+  sc.addEventListener('scroll', () => { if(tick) return; tick = true; requestAnimationFrame(() => { tick = false; refresh(); }); }, {passive:true});
+
+  try{
+    const doc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
+    if(!document.getElementById('pdfPreviewOverlay').classList.contains('open') || !wrap.isConnected){ try{ doc.destroy(); }catch(e){} return; }
+    _mvDoc = doc;
+    inner.innerHTML = '';
+    for(let i=1;i<=doc.numPages;i++){
+      const pg = await doc.getPage(i), vp = pg.getViewport({scale:1});
+      const div = document.createElement('div');
+      div.style.cssText = `margin:0 auto 8px;width:calc(100% - 16px);aspect-ratio:${vp.width}/${vp.height};background:#fff;position:relative;box-shadow:0 1px 4px rgba(0,0,0,.4);`;
+      div._n = i; inner.appendChild(div); pages.push(div);
+      if(i <= 2) refresh();
+    }
+    refresh();
+  }catch(e){
+    inner.innerHTML = '<div style="color:#fecaca;text-align:center;padding:40px 16px;font-size:13px;">PDFを表示できませんでした：' + escHtml(e.message || String(e)) + '</div>';
+  }
+}
+
 let _previewBlobUrl = null;
 let _previewArchiveId = null; // プレビュー中のレコードID（署名済み一覧のものなら「ページ編集」を使えるようにする）
 
@@ -4923,22 +5042,12 @@ function _openPdfPreviewFromBytes(bytes, filename){
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
 
-    // iOSはiframeでPDFが開けないため、オブジェクトタグとフォールバックを使う
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if(isIOS){
-      // iOS: 新しいタブで開く + プレビューエリアにメッセージ
-      body.innerHTML = `
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;">
-          <div style="font-size:48px;">📄</div>
-          <div style="color:#fff;font-size:15px;font-weight:600;">${escHtml(filename)}</div>
-          <button onclick="window.open('${_previewBlobUrl}','_blank')"
-            style="padding:14px 28px;border-radius:12px;border:none;background:#7c3aed;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">
-            📂 PDFを開く
-          </button>
-          <div style="color:rgba(255,255,255,0.6);font-size:12px;">タップしてSafariで表示</div>
-        </div>`;
+    // スマホ・タブレット：iframeではPDFが開けない（iPhoneは「PDFを開く」画面が出てしまう）ため、アプリ内で描画してワンタップで表示
+    if(_useInAppViewer()){
+      overlay.classList.add('open');
+      _openMobileViewer(body, bytes);
     } else {
-      // PC・Android: iframe埋め込み
+      // PC: iframe埋め込み
       const iframe = document.createElement('iframe');
       iframe.src = _previewBlobUrl;
       iframe.style.cssText = 'flex:1;width:100%;height:100%;border:none;';
@@ -4958,7 +5067,9 @@ function closePdfPreview(){
   document.getElementById('pdfPreviewBody').innerHTML = '';
   if(_previewBlobUrl){ URL.revokeObjectURL(_previewBlobUrl); _previewBlobUrl = null; }
   _previewArchiveId = null;
-  _markPreviewRow(null);
+  _mvCleanup();
+  // PC：右側プレビューを閉じたら色も消す。スマホ：どれを開いたか分かるよう、最後に開いた行の水色を残す
+  if(document.body.classList.contains('arch-preview')) _markPreviewRow(null);
   document.body.classList.remove('arch-preview');   // PC：右側のプレビューを消して、一覧を元の位置に戻す
 }
 
