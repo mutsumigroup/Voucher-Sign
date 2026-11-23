@@ -540,11 +540,23 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.33</span>
+          <span class="version-current">v4.34</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.34</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>PDFの読み取りを修正：文字を見た目の読み順（上→下・左→右）に並べ替えてから解析。船名・区分（乗船/下船）・日付・伝票番号を正しく読めるように</li>
+            <li>「26-S1012」のような2桁年の伝票番号、「Subject: ○○ at: ○○」形式、区分欄が便名（NH848等）の書式にも対応</li>
+            <li>Voucherチェック、元に戻す、ダブりチェック、結合ファイルの日付の判定に反映</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.33</span>
@@ -3295,9 +3307,9 @@ function _fpHash(str){ let h=5381; for(let i=0;i<str.length;i++){ h=((h<<5)+h+st
 
 async function _pageFingerprint(page){
   // 文字のあるページは文字で、文字がほぼ無いページ（画像のみ）は縮小画像で指紋を作る
-  let text='';
-  try{ const tc = await page.getTextContent(); text = tc.items.map(i=>i.str).join(' ').replace(/\s+/g,''); }catch(e){}
-  if(text.length >= 40) return {fp:'t:'+_fpHash(text.toLowerCase()), text: text};
+  let text='', spaced='';
+  try{ const tc = await page.getTextContent(); spaced = _readingOrderText(tc.items); text = spaced.replace(/\s+/g,''); }catch(e){}
+  if(text.length >= 40) return {fp:'t:'+_fpHash(text.toLowerCase()), text: spaced};
   try{
     const vp0 = page.getViewport({scale:1});
     const sc = 32 / Math.max(vp0.width, vp0.height);
@@ -3307,8 +3319,8 @@ async function _pageFingerprint(page){
     await page.render({canvasContext:ctx, viewport:vp}).promise;
     const d = ctx.getImageData(0,0,cv.width,cv.height).data; let bits='';
     for(let i=0;i<d.length;i+=4){ const g=(d[i]+d[i+1]+d[i+2])/3; bits += g<128 ? '1':'0'; }
-    return {fp:'i:'+_fpHash(bits), text:text};
-  }catch(e){ return {fp:null, text:text}; }
+    return {fp:'i:'+_fpHash(bits), text:spaced};
+  }catch(e){ return {fp:null, text:spaced}; }
 }
 
 function closeDupCheck(){ const o=document.getElementById('dupCheckOverlay'); if(o) o.remove(); }
@@ -3343,7 +3355,7 @@ async function runMergedDupCheck(){
         const {fp, text} = await _pageFingerprint(pg);
         totalPages++;
         if(!fp) continue;
-        const info = _parseVoucherInfo(text.replace(/([a-z])([A-Z])/g,'$1 $2'));
+        const info = _parseVoucherInfo(text);
         if(!map.has(fp)) map.set(fp, []);
         map.get(fp).push({id:m.id, filename:m.filename, page:pn, savedAt:m.savedAt, label: info.voucherNo || ''});
       }
@@ -3392,7 +3404,7 @@ async function _pageTextsOf(bytes){
   const out = [];
   const doc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
   for(let i=1;i<=doc.numPages;i++){
-    try{ const tc = await (await doc.getPage(i)).getTextContent(); out.push(tc.items.map(x=>x.str).join(' ').replace(/\s+/g,' ').trim()); }
+    try{ const tc = await (await doc.getPage(i)).getTextContent(); out.push(_readingOrderText(tc.items)); }
     catch(e){ out.push(''); }
   }
   return out;
@@ -3819,13 +3831,29 @@ function extractCategory(filename){
    アップロードした原本とサインアプリ保存済みPDFを突き合わせる
 ══════════════════════════════════════════ */
 
+// PDF内の文字を「見た目の読み順」（上→下、左→右）に並べ替えてテキスト化する
+// ※ PDFの内部順は見た目と違うことが多く（例：「Name of Vessel:」の値が文章の最後に出る）、
+//    そのまま結合すると船名・区分・伝票番号を正しく読み取れないため、位置で並べ直す
+function _readingOrderText(items){
+  const its = (items||[]).filter(i => i && i.str && i.str.trim() && i.transform)
+    .map(i => ({s:i.str, x:i.transform[4], y:i.transform[5]}));
+  its.sort((a,b)=> b.y - a.y);
+  const lines = [];
+  for(const it of its){
+    const ln = lines.find(l => Math.abs(l.y - it.y) <= 4);
+    if(ln){ ln.items.push(it); } else { lines.push({y:it.y, items:[it]}); }
+  }
+  lines.sort((a,b)=> b.y - a.y);
+  return lines.map(l => l.items.sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ')).join(' ').replace(/\s+/g,' ').trim();
+}
+
 // PDF（1ページ目）の全文テキストを抽出
 async function _extractPdfFullText(bytes){
   try{
     const doc = await pdfjsLib.getDocument({data:bytes.slice(), stopAtErrors:false}).promise;
     const page = await doc.getPage(1);
     const content = await page.getTextContent();
-    return content.items.map(it=>it.str).join(' ').replace(/\s+/g,' ').trim();
+    return _readingOrderText(content.items);
   }catch(e){
     console.warn('PDFテキスト抽出失敗:', e);
     return '';
@@ -3835,11 +3863,11 @@ async function _extractPdfFullText(bytes){
 // 全文テキストから Voucher情報を抽出
 function _parseVoucherInfo(text){
   // 伝票番号: "2026-A0031" のようなパターン（年-英字+数字）
-  const noMatch = text.match(/\b(\d{4}-[A-Z]\d{3,6})\b/);
+  const noMatch = text.match(/\b(\d{2,4}-[A-Z]\d{3,6})\b/);
   // 船名: "Name of Vessel: XXX" の直後
-  const shipMatch = text.match(/Name of Vessel:?\s*([A-Z0-9][A-Z0-9 .\-]*?)(?:\s+Port at:|\s+Port:|$)/i);
+  const shipMatch = text.match(/(?:Name of Vessel|Subject):?\s*([A-Z0-9][A-Z0-9 .\-&']*?)(?:\s+Port at:|\s+Port:|\s+at:|\s+This is to certify|$)/i);
   // 区分: "Category: XXX"
-  const catMatch = text.match(/Category:?\s*([A-Za-z]+)/i);
+  const catMatch = text.match(/Category:?\s*([A-Za-z0-9]+)/i);
   // 日付: "Date: 2026/Nov/17" 形式
   const dateMatch = text.match(/Date:?\s*([0-9]{4}\/[A-Za-z]{3}\/[0-9]{1,2})/i);
   // 合計金額: "Total JPY 1,000"
