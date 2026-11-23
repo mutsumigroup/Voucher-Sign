@@ -594,11 +594,21 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.53</span>
+          <span class="version-current">v4.54</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.54</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ページ編集：すべてのページを削除対象にした場合も保存できるように（その場合は「ファイルごと削除」となり、ファイル全体がゴミ箱へ移動します。ゴミ箱から元に戻せます）。複数ページの同時削除は、これまでどおりページを何枚でもタップして選べます</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.53</span>
@@ -5169,9 +5179,13 @@ function _peUpdateFooter(){
   if(added) parts.push(`追加${added}`);
   if(ordChanged) parts.push('順番変更');
   if(kept.length === 0){
-    saveBtn.disabled = true;
-    footerText.textContent = '⚠️ 全ページは削除できません（最低1ページは残してください）';
-  } else if(parts.length === 0){
+    // すべてのページを削除対象にした場合は、ファイルごと削除（ゴミ箱へ）できる
+    saveBtn.disabled = false; saveBtn.textContent = 'ファイルごと削除';
+    footerText.textContent = '⚠️ 全ページを削除対象にしています。保存すると、このファイル全体がゴミ箱に移動します';
+    return;
+  }
+  saveBtn.textContent = '変更を保存';
+  if(parts.length === 0){
     saveBtn.disabled = true;
     footerText.textContent = 'タップ＝削除する／戻す、◀ ▶＝順番を移動、「＋ ページを追加」＝PDF・画像を追加';
   } else {
@@ -5313,7 +5327,18 @@ async function savePagesEditor(){
   const pe = _pageEditor; if(!pe) return;
   const { id, filename, bytes, srcDoc, pageCount, items, marked, extra } = pe;
   const kept = items.filter(it => !marked.has(it.uid));
-  if(kept.length === 0){ alert('全ページは削除できません'); return; }
+  if(kept.length === 0){
+    if(!confirm(`全${items.length}ページを削除対象にしています。\n\nこのファイル全体をゴミ箱に移動します（ホームの「ゴミ箱」から元に戻せます）。\nよろしいですか？`)) return;
+    try{
+      await trashArchiveIds([id]);
+      closePagesEditor();
+      _markPreviewRow(null);
+      closePdfPreview();
+      await renderArchive();
+      alert('ファイルをゴミ箱に移動しました');
+    }catch(e){ alert('ファイルの削除に失敗しました: ' + e.message); }
+    return;
+  }
   const delItems = items.filter(it => it.src==='orig' && marked.has(it.uid));
   const addCount = kept.filter(it => it.src==='add').length;
   let ordChanged = false, last = -1; for(const it of kept){ if(it.seq < last){ ordChanged = true; break; } last = it.seq; }
