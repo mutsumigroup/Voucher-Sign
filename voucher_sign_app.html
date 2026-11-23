@@ -275,6 +275,7 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 #pdfPreviewHeader{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e1b4b;flex-shrink:0;gap:8px;}
 #pdfPreviewTitle{color:#fff;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
 #pdfPreviewDlBtn{padding:6px 14px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
+#pdfPreviewHeader button{white-space:nowrap;}
 #pdfPreviewEditBtn{padding:6px 12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewCloseBtn{padding:6px 12px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewBody{flex:1;overflow:hidden;display:flex;align-items:stretch;}
@@ -549,11 +550,21 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.36</span>
+          <span class="version-current">v4.37</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.37</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>署名済み一覧のプレビュー画面に「📁 結合ファイルへ移動」ボタンを追加（ページ編集の隣）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.36</span>
@@ -4635,6 +4646,16 @@ async function moveToMergedFiles(ids){
   }
 }
 
+
+// プレビュー中のPDFを「結合ファイル」へ移動する
+async function movePreviewToMerged(){
+  const id = _previewArchiveId;
+  if(!id) return;
+  if(!confirm('このPDFを結合ファイルへ移動しますか？')) return;
+  closePdfPreview();
+  await moveToMergedFiles([id]);
+}
+
 function updateArchiveBulkBar(){
   const n = archiveSelectedIds.size;
   const bulkBar  = document.getElementById('archiveBulkBar');
@@ -4690,6 +4711,8 @@ async function previewArchiveItem(id){
     _openPdfPreviewFromBytes(bytes, r.filename);
     const _umb = document.getElementById('pdfPreviewUnmergeBtn');
     if(_umb) _umb.style.display = (r.type === 'merged') ? 'inline-block' : 'none';
+    const _mvb = document.getElementById('pdfPreviewMoveBtn');
+    if(_mvb) _mvb.style.display = (r.type !== 'merged') ? 'inline-block' : 'none';
   }catch(e){
     alert('プレビューに失敗しました: ' + e.message);
   }
@@ -4709,6 +4732,7 @@ function _openPdfPreviewFromBytes(bytes, filename){
     const editBtn = document.getElementById('pdfPreviewEditBtn');
     if(editBtn) editBtn.style.display = _previewArchiveId ? 'inline-block' : 'none';
     const umBtn = document.getElementById('pdfPreviewUnmergeBtn'); if(umBtn) umBtn.style.display = 'none';
+    const mvBtn = document.getElementById('pdfPreviewMoveBtn'); if(mvBtn) mvBtn.style.display = 'none';
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
 
@@ -5314,6 +5338,7 @@ refreshPendingBanner();
   <div id="pdfPreviewHeader">
     <div id="pdfPreviewTitle"></div>
     <button id="pdfPreviewEditBtn" onclick="openPagesEditor()" style="display:none;">🗑 ページ編集</button>
+    <button id="pdfPreviewMoveBtn" onclick="movePreviewToMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">📁 結合ファイルへ移動</button>
     <button id="pdfPreviewUnmergeBtn" onclick="unmergeArchiveItem()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">↩ 元に戻す</button>
     <button id="pdfPreviewDlBtn" onclick="pdfPreviewDownload()">⬇ DL</button>
     <button id="pdfPreviewCloseBtn" onclick="closePdfPreview()">✕</button>
