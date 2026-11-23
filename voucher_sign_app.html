@@ -433,13 +433,16 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
 @keyframes fxTitle{from{opacity:0;transform:scale(2.2);}to{opacity:1;transform:scale(1);}}
 
 /* ── PC表示：PDFを開いている間だけ、左に一覧・右にPDFプレビュー（境界はドラッグで調整可） ── */
-:root{--list-w:560px;}
+:root{--list-w:560px;--solo-w:880px;}
 @media (min-width:1000px){
   body.arch-preview .body{max-width:none;margin:0;width:var(--list-w);}
   body.arch-preview #pdfPreviewOverlay{
     top:var(--hdr,64px);left:var(--list-w);width:calc(100% - var(--list-w));height:calc(100% - var(--hdr,64px));
     background:#1e1b4b;z-index:50;border-left:1px solid #cbd5e1;}
   body.arch-preview #splitHandle{display:flex;}
+  body.arch-solo .body{max-width:none;width:var(--solo-w);}
+  body.arch-solo #splitHandle{display:flex;left:calc(50% + var(--solo-w)/2 - 6px);}
+  body.arch-solo.split-dragging{cursor:col-resize;-webkit-user-select:none;user-select:none;}
   body.arch-preview.split-dragging #pdfPreviewBody iframe{pointer-events:none;}
   body.arch-preview.split-dragging{cursor:col-resize;-webkit-user-select:none;user-select:none;}
 }
@@ -569,11 +572,21 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.44</span>
+          <span class="version-current">v4.45</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.45</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>PC表示：プレビューを開いていない時の一覧幅を広げ（初期880px）、右端をドラッグして自由に調整できるように（署名済み一覧・結合ファイル共通。幅は記憶、ダブルクリックで初期値）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.44</span>
@@ -5691,16 +5704,34 @@ const FusionFX = (function(){
     return px;
   }
   try{ var saved = parseInt(localStorage.getItem('voucher_list_w'),10); if(saved) setW(saved); }catch(e){}
+  // 一覧だけ表示しているとき（プレビューなし）の幅。左右対称に広がる
+  function setSolo(px){
+    px = Math.min(Math.max(px, 480), Math.max(480, window.innerWidth-60));
+    document.documentElement.style.setProperty('--solo-w', px+'px'); return px;
+  }
+  try{ var sv2 = parseInt(localStorage.getItem('voucher_solo_w'),10); if(sv2) setSolo(sv2); }catch(e){}
+  function cssPx(n){ return parseInt(getComputedStyle(document.documentElement).getPropertyValue(n),10); }
+  function syncSolo(){
+    var as=document.getElementById('archiveScreen'), ov=document.getElementById('pdfPreviewOverlay');
+    var on = !!(as && as.style.display==='flex' && window.innerWidth>=1000 && !(ov && ov.classList.contains('open')));
+    document.body.classList.toggle('arch-solo', on);
+    if(on) hdr();
+  }
+  window._syncSolo = syncSolo;
   document.addEventListener('DOMContentLoaded',function(){
     var h=document.createElement('div'); h.id='splitHandle'; h.title='ドラッグで幅を調整（ダブルクリックで元に戻す）';
     document.body.appendChild(h);
     var drag=false;
     h.addEventListener('pointerdown',function(e){ drag=true; h.setPointerCapture(e.pointerId); document.body.classList.add('split-dragging'); e.preventDefault(); });
-    h.addEventListener('pointermove',function(e){ if(drag) setW(e.clientX); });
+    h.addEventListener('pointermove',function(e){ if(!drag) return;
+      if(document.body.classList.contains('arch-solo')) setSolo(2*(e.clientX - window.innerWidth/2)); else setW(e.clientX); });
     function end(e){ if(!drag) return; drag=false; document.body.classList.remove('split-dragging');
-      try{ localStorage.setItem('voucher_list_w', String(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--list-w'),10))); }catch(_){} }
+      try{ if(document.body.classList.contains('arch-solo')) localStorage.setItem('voucher_solo_w', String(cssPx('--solo-w')));
+           else localStorage.setItem('voucher_list_w', String(cssPx('--list-w'))); }catch(_){} }
     h.addEventListener('pointerup',end); h.addEventListener('pointercancel',end);
-    h.addEventListener('dblclick',function(){ setW(560); try{ localStorage.removeItem('voucher_list_w'); }catch(_){} });
+    h.addEventListener('dblclick',function(){
+      if(document.body.classList.contains('arch-solo')){ setSolo(880); try{ localStorage.removeItem('voucher_solo_w'); }catch(_){} }
+      else { setW(560); try{ localStorage.removeItem('voucher_list_w'); }catch(_){} } });
   });
   window._splitPreviewOn = function(){
     var as=document.getElementById('archiveScreen');
@@ -5710,12 +5741,17 @@ const FusionFX = (function(){
   };
   document.addEventListener('DOMContentLoaded',function(){
     var as=document.getElementById('archiveScreen');
+    var ov=document.getElementById('pdfPreviewOverlay');
+    if(ov) new MutationObserver(syncSolo).observe(ov,{attributes:true,attributeFilter:['class']});
+    if(as) new MutationObserver(syncSolo).observe(as,{attributes:true,attributeFilter:['style']});
+    syncSolo();
     if(as) new MutationObserver(function(){
       if(as.style.display!=='flex' && document.body.classList.contains('arch-preview')){ try{ closePdfPreview(); }catch(e){} }
     }).observe(as,{attributes:true,attributeFilter:['style']});
   });
   window.addEventListener('resize',function(){
     var cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--list-w'),10)||560; setW(cur);
+    setSolo(cssPx('--solo-w')||880); syncSolo();
     if(document.getElementById('pdfPreviewOverlay').classList.contains('open')) window._splitPreviewOn();
   });
 })();
