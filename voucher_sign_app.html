@@ -540,11 +540,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.32</span>
+          <span class="version-current">v4.33</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.33</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>「元に戻す」で、ファイル名の乗船/下船がPDFの内容と食い違う問題を修正（区分はPDF内の Category から決定）</li>
+            <li>名前は「船名_区分_日付」の形式に</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.32</span>
@@ -3430,9 +3441,16 @@ async function unmergeArchiveItem(){
         const en = (k+1<starts.length) ? starts[k+1] : total;
         const head = texts[st] || '';
         const info = _parseVoucherInfo(head);
-        const ship = (info.ship || '').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'');
+        // 船名：PDFから読めればそれを、読めなければ結合ファイル名の先頭部分（Embark/Disembark等より前）を使う
         const base = (rec.filename||'merged').replace(/\.pdf$/i,'').replace(/_他\d+件_merged.*$/,'').replace(/_merged.*$/,'');
-        let nm = ship ? `${ship}_${info.category||'Voucher'}${info.voucherNo?'_'+info.voucherNo:''}` : `${base}_${k+1}`;
+        const baseShip = base.replace(/_(Disembark|Embarkation|Embark|Transfer|Sending|VM)(_.*)?$/i,'');
+        const ship = (info.ship || '').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'') || baseShip;
+        // 区分は必ずそのページの内容（Category:）から決める。読めなければ区分は付けない
+        const cat = info.category ? info.category.replace(/[^A-Za-z]/g,'') : '';
+        const dm = (info.date||'').match(/^(\d{4})\/([A-Za-z]{3})\/(\d{1,2})$/);
+        const MONN = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+        const dstr = (dm && MONN[dm[2].toLowerCase()]) ? `${dm[1]}${String(MONN[dm[2].toLowerCase()]).padStart(2,'0')}${String(+dm[3]).padStart(2,'0')}` : '';
+        let nm = [ship, cat, dstr || (info.voucherNo||'')].filter(Boolean).join('_') || `${base}_${k+1}`;
         parts.push({name: nm+'.pdf', type: (en-st>1)?'receipt':'sign', savedAt:null, dateOnly:false, confirmed:false, start:st, count:en-st, mergeParts:null, _info:info});
       });
     }
