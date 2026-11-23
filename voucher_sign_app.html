@@ -380,6 +380,54 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
 #uploadScreen,#processingScreen,#appScreen,#archiveScreen,#modeSelect,#pendingListArea{animation:scrFade .28s var(--ease-out);}
 @keyframes scrFade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition-duration:.01s !important;}}
+
+/* ── 融合エフェクト（結合時の演出） ── */
+#fusionFx{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;flex-direction:column;
+  background:radial-gradient(circle at 50% 45%,#3b1670 0%,#150a33 55%,#05030f 100%);opacity:0;transition:opacity .35s ease;overflow:hidden;-webkit-user-select:none;user-select:none;}
+#fusionFx.show{opacity:1;}
+#fusionFx.shake .fx-stage{animation:fxShake .09s linear infinite;}
+@keyframes fxShake{0%{transform:translate(0,0);}25%{transform:translate(3px,-2px);}50%{transform:translate(-3px,2px);}75%{transform:translate(2px,3px);}100%{transform:translate(0,0);}}
+#fusionFx .fx-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+#fusionFx .fx-stage{position:relative;z-index:1;width:300px;height:300px;}
+#fusionFx .fx-ring{position:absolute;left:50%;top:50%;border-radius:50%;transform:translate(-50%,-50%);}
+#fusionFx .fx-ring.r1{width:280px;height:280px;background:conic-gradient(from 0deg,transparent,rgba(168,85,247,.85),transparent 40%,rgba(56,189,248,.7),transparent 80%);
+  -webkit-mask:radial-gradient(circle,transparent 52%,#000 54%,#000 70%,transparent 72%);mask:radial-gradient(circle,transparent 52%,#000 54%,#000 70%,transparent 72%);animation:fxSpin 1.1s linear infinite;}
+#fusionFx .fx-ring.r2{width:210px;height:210px;background:conic-gradient(from 90deg,transparent,rgba(250,204,21,.8),transparent 45%,rgba(244,114,182,.7),transparent 85%);
+  -webkit-mask:radial-gradient(circle,transparent 50%,#000 53%,#000 72%,transparent 75%);mask:radial-gradient(circle,transparent 50%,#000 53%,#000 72%,transparent 75%);animation:fxSpin .8s linear infinite reverse;}
+#fusionFx .fx-core{position:absolute;left:50%;top:50%;width:90px;height:90px;border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,#fff 0%,rgba(216,180,254,.9) 35%,transparent 70%);animation:fxPulse .7s ease-in-out infinite alternate;filter:blur(2px);}
+@keyframes fxSpin{to{transform:translate(-50%,-50%) rotate(360deg);}}
+@keyframes fxPulse{from{opacity:.55;transform:translate(-50%,-50%) scale(.8);}to{opacity:1;transform:translate(-50%,-50%) scale(1.25);}}
+#fusionFx .fx-card{position:absolute;left:50%;top:50%;width:58px;height:80px;border-radius:7px;background:linear-gradient(160deg,#fff,#e9d5ff);
+  border:2px solid #c084fc;box-shadow:0 0 14px rgba(192,132,252,.9);display:flex;align-items:center;justify-content:center;font-size:24px;
+  animation:fxSpiral 2.3s cubic-bezier(.6,.02,.4,1) forwards;animation-delay:var(--d,0s);opacity:0;
+  transform:translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--r) * -1)) scale(1);}
+@keyframes fxSpiral{
+  0%{opacity:0;transform:translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--r) * -1)) scale(1.1);}
+  12%{opacity:1;}
+  100%{opacity:1;transform:translate(-50%,-50%) rotate(calc(var(--a) + 1080deg)) translateY(0px) scale(.3);}}
+#fusionFx .fx-label{position:relative;z-index:1;margin-top:10px;color:#e9d5ff;font-weight:900;font-size:18px;letter-spacing:.25em;text-shadow:0 0 12px #a855f7;animation:fxBlink 1s ease-in-out infinite alternate;}
+@keyframes fxBlink{from{opacity:.55;}to{opacity:1;}}
+#fusionFx .fx-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;}
+#fusionFx .fx-flash.go{animation:fxFlash .75s ease-out;}
+@keyframes fxFlash{0%{opacity:0;}25%{opacity:1;}100%{opacity:0;}}
+#fusionFx .fx-result{position:absolute;left:50%;top:50%;width:150px;height:208px;border-radius:12px;transform:translate(-50%,-50%) scale(.2);opacity:0;
+  background:linear-gradient(155deg,#fef9c3 0%,#fde68a 40%,#f59e0b 100%);border:4px solid #fbbf24;box-shadow:0 0 30px 8px rgba(251,191,36,.8),0 0 80px 20px rgba(168,85,247,.5);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px;text-align:center;overflow:hidden;}
+#fusionFx .fx-result.go{animation:fxReveal .7s cubic-bezier(.34,1.56,.64,1) forwards;}
+@keyframes fxReveal{from{opacity:0;transform:translate(-50%,-50%) scale(.2) rotate(-25deg);}to{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0);}}
+#fusionFx .fx-result .rs-icon{font-size:44px;}
+#fusionFx .fx-result .rs-title{font-size:13px;font-weight:900;color:#78350f;word-break:break-all;line-height:1.3;max-height:5.2em;overflow:hidden;}
+#fusionFx .fx-result .rs-meta{font-size:12px;font-weight:800;color:#92400e;background:rgba(255,255,255,.55);padding:2px 8px;border-radius:10px;}
+#fusionFx .fx-result::after{content:'';position:absolute;top:-20%;left:-60%;width:40%;height:140%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);transform:rotate(18deg);}
+#fusionFx .fx-result.go::after{animation:fxShine 1.2s .5s ease-in-out;}
+@keyframes fxShine{from{left:-60%;}to{left:130%;}}
+#fusionFx .fx-spark{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;background:#fde047;box-shadow:0 0 10px 3px #facc15;opacity:0;}
+#fusionFx .fx-spark.go{animation:fxSpark .9s ease-out forwards;}
+@keyframes fxSpark{0%{opacity:1;transform:translate(-50%,-50%) scale(1);}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.2);}}
+#fusionFx .fx-title{position:absolute;top:14%;left:0;right:0;text-align:center;font-size:30px;font-weight:900;letter-spacing:.2em;color:#fde68a;opacity:0;text-shadow:0 0 18px #f59e0b,0 2px 0 #92400e;}
+#fusionFx .fx-title.go{animation:fxTitle .8s .25s cubic-bezier(.34,1.56,.64,1) forwards;}
+@keyframes fxTitle{from{opacity:0;transform:scale(2.2);}to{opacity:1;transform:scale(1);}}
 </style>
 </head>
 <body>
@@ -492,11 +540,67 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.25</span>
+          <span class="version-current">v4.30</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.30</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合ファイル画面に「ダブりチェック（最終確認）」を追加</li>
+            <li>全結合ファイルの全ページを突き合わせ、同じ内容のページ・同じファイルを一覧表示</li>
+            <li>「開く」からそのままプレビュー／ページ編集で不要ページを削除可能</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.29</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>船名サマリーの「乗船／下船 ○件」をタップした時、1件でも必ず一覧を絞り込んで表示（勝手にプレビューが開かない）</li>
+            <li>絞り込み後、一覧の位置まで自動でスクロール</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.28</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合ファイルの日付を、結合した日ではなく「結合したバウチャーの中で一番古い日付」に変更</li>
+            <li>日付はPDF内の「Date:」から読み取り、読めない場合は保存日を使用</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.27</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>融合演出を強化：光の粒が渦を巻きながら加速して中心へ吸い込まれる演出に</li>
+            <li>最後に渦が一気に収束して画面が震え、フラッシュ→結合カード登場</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.26</span>
+            <span class="ver-date">2026/11/21</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合時に「融合」演出を追加（カードが渦に吸い込まれ、フラッシュとともに結合カードが登場）</li>
+            <li>演出中に画面をタップすると早送りできます</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.25</span>
@@ -1079,6 +1183,10 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
         <button class="archive-add-btn" onclick="document.getElementById('archiveUploadInput').click()">＋ PDFを追加</button>
       </div>
       <input type="file" id="archiveUploadInput" accept="application/pdf" style="display:none" onchange="handleArchiveUpload(event)">
+    </div>
+    <!-- 結合ファイル画面のみ：ダブりチェック -->
+    <div id="mergedToolsRow" style="display:none;">
+      <button class="archive-add-btn" style="width:100%;border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;padding:11px;font-size:14px;" onclick="runMergedDupCheck()">🔍 ダブりチェック（最終確認）</button>
     </div>
     <!-- 一括操作バー（選択時のみ表示） -->
     <div id="archiveBulkBar" style="display:none;">
@@ -3143,6 +3251,101 @@ let archiveSelectedIds = new Set();
 
 let _archiveView = 'archive'; // 'archive'=署名済み一覧 / 'merged'=結合ファイル（ホームから開く）
 
+
+/* ── 結合ファイルのダブりチェック：全結合ファイルの全ページを突き合わせる ── */
+function _fpHash(str){ let h=5381; for(let i=0;i<str.length;i++){ h=((h<<5)+h+str.charCodeAt(i))|0; } return (h>>>0).toString(36)+'_'+str.length; }
+
+async function _pageFingerprint(page){
+  // 文字のあるページは文字で、文字がほぼ無いページ（画像のみ）は縮小画像で指紋を作る
+  let text='';
+  try{ const tc = await page.getTextContent(); text = tc.items.map(i=>i.str).join(' ').replace(/\s+/g,''); }catch(e){}
+  if(text.length >= 40) return {fp:'t:'+_fpHash(text.toLowerCase()), text: text};
+  try{
+    const vp0 = page.getViewport({scale:1});
+    const sc = 32 / Math.max(vp0.width, vp0.height);
+    const vp = page.getViewport({scale: sc});
+    const cv = document.createElement('canvas'); cv.width = Math.max(1,Math.round(vp.width)); cv.height = Math.max(1,Math.round(vp.height));
+    const ctx = cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+    await page.render({canvasContext:ctx, viewport:vp}).promise;
+    const d = ctx.getImageData(0,0,cv.width,cv.height).data; let bits='';
+    for(let i=0;i<d.length;i+=4){ const g=(d[i]+d[i+1]+d[i+2])/3; bits += g<128 ? '1':'0'; }
+    return {fp:'i:'+_fpHash(bits), text:text};
+  }catch(e){ return {fp:null, text:text}; }
+}
+
+function closeDupCheck(){ const o=document.getElementById('dupCheckOverlay'); if(o) o.remove(); }
+
+async function runMergedDupCheck(){
+  closeDupCheck();
+  const ov = document.createElement('div'); ov.id='dupCheckOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#f0f4f8;display:flex;flex-direction:column;';
+  ov.innerHTML = `<div style="background:#1a3252;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;font-size:16px;font-weight:800;">🔍 ダブりチェック（結合ファイル）</div>
+      <button onclick="closeDupCheck()" style="padding:6px 12px;border-radius:8px;border:none;background:#475569;color:#fff;font-size:14px;font-weight:700;">✕ 閉じる</button></div>
+    <div id="dupCheckBody" style="flex:1;overflow:auto;padding:16px;max-width:560px;width:100%;margin:0 auto;"></div>`;
+  document.body.appendChild(ov);
+  const body = document.getElementById('dupCheckBody');
+  const say = m => { body.innerHTML = `<div style="text-align:center;padding:40px 10px;color:#64748b;font-size:14px;font-weight:700;">${m}</div>`; };
+  try{
+    say('結合ファイルを読み込み中...');
+    const idx = await _getVoucherIndex();
+    const merged = Object.keys(idx).filter(id => idx[id].type==='merged').map(id => ({id, ...idx[id]}))
+      .sort((a,b)=> new Date(b.savedAt)-new Date(a.savedAt));
+    if(merged.length===0){ say('結合ファイルがありません'); return; }
+    const map = new Map();      // 指紋 → 出現箇所の配列
+    let totalPages = 0;
+    for(let n=0;n<merged.length;n++){
+      const m = merged[n];
+      say(`確認中... ${n+1} / ${merged.length} 件<br><span style="font-size:12px;font-weight:500;">${escHtml(m.filename)}</span>`);
+      let rec; try{ rec = await getArchiveById(m.id); }catch(e){ rec=null; }
+      if(!rec || !rec.pdfBase64) continue;
+      let doc; try{ doc = await pdfjsLib.getDocument({data: base64ToUint8(rec.pdfBase64), stopAtErrors:false}).promise; }catch(e){ continue; }
+      for(let pn=1; pn<=doc.numPages; pn++){
+        const pg = await doc.getPage(pn);
+        const {fp, text} = await _pageFingerprint(pg);
+        totalPages++;
+        if(!fp) continue;
+        const info = _parseVoucherInfo(text.replace(/([a-z])([A-Z])/g,'$1 $2'));
+        if(!map.has(fp)) map.set(fp, []);
+        map.get(fp).push({id:m.id, filename:m.filename, page:pn, savedAt:m.savedAt, label: info.voucherNo || ''});
+      }
+    }
+    const groups = [...map.values()].filter(g => g.length >= 2);
+    // ファイル単位の完全一致（同じPDFが2つ）も検出
+    const bySum = new Map();
+    merged.forEach(m => { if(m.checksum){ if(!bySum.has(m.checksum)) bySum.set(m.checksum, []); bySum.get(m.checksum).push(m); } });
+    const fileDups = [...bySum.values()].filter(g => g.length >= 2);
+
+    const head = `<div style="font-size:12px;color:#64748b;margin-bottom:10px;">結合ファイル ${merged.length}件・全 ${totalPages}ページを突き合わせました</div>`;
+    if(groups.length===0 && fileDups.length===0){
+      body.innerHTML = head + `<div style="background:#f0fdf4;border:2px solid #16a34a;border-radius:14px;padding:22px 16px;text-align:center;">
+        <div style="font-size:36px;">✅</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:6px;">ダブりはありませんでした</div></div>`;
+      return;
+    }
+    const fmtDate = iso => { const d=new Date(iso); return isNaN(d)?'':`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; };
+    let html = head + `<div style="background:#fef2f2;border:2px solid #ef4444;border-radius:14px;padding:12px 14px;margin-bottom:12px;color:#b91c1c;font-weight:900;font-size:14px;">⚠️ ダブりの可能性が ${groups.length + fileDups.length} 件あります</div>`;
+    fileDups.forEach(g=>{
+      html += `<div style="background:#fff;border:1.5px solid #fca5a5;border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:900;color:#b91c1c;font-size:13px;margin-bottom:6px;">同じファイルが ${g.length} 件</div>` +
+        g.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f1f5f9;">
+          <div style="flex:1;min-width:0;font-size:12px;font-weight:700;word-break:break-all;">${escHtml(m.filename)}<div style="font-weight:500;color:#64748b;">${fmtDate(m.savedAt)}</div></div>
+          <button onclick="previewArchiveItem('${m.id}')" style="padding:6px 10px;border-radius:8px;border:1.5px solid #7c3aed;background:#fff;color:#7c3aed;font-weight:800;font-size:12px;">開く</button></div>`).join('') + `</div>`;
+    });
+    groups.forEach(g=>{
+      const lbl = (g.find(x=>x.label)||{}).label;
+      html += `<div style="background:#fff;border:1.5px solid #fcd34d;border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:900;color:#92400e;font-size:13px;margin-bottom:6px;">同じ内容のページが ${g.length} か所${lbl?`（${escHtml(lbl)}）`:''}</div>` +
+        g.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f1f5f9;">
+          <div style="flex:1;min-width:0;font-size:12px;font-weight:700;word-break:break-all;">${escHtml(x.filename)}<div style="font-weight:500;color:#64748b;">${x.page}ページ目 ・ ${fmtDate(x.savedAt)}</div></div>
+          <button onclick="previewArchiveItem('${x.id}')" style="padding:6px 10px;border-radius:8px;border:1.5px solid #7c3aed;background:#fff;color:#7c3aed;font-weight:800;font-size:12px;">開く</button></div>`).join('') + `</div>`;
+    });
+    html += `<div style="font-size:11.5px;color:#64748b;line-height:1.6;">※「開く」→「ページ編集」で、不要なページを削除できます。</div>`;
+    body.innerHTML = html;
+  }catch(e){
+    console.error(e); say('チェックに失敗しました: ' + escHtml(e.message||String(e)));
+  }
+}
+
 async function showArchive(view){
   _archiveView = (view === 'merged') ? 'merged' : 'archive';
   const isMerged = _archiveView === 'merged';
@@ -3154,6 +3357,8 @@ async function showArchive(view){
   if(lbl) lbl.textContent = isMerged ? '📁 結合ファイル' : '📂 署名済み一覧';
   const hb = document.getElementById('archiveHeaderBtns');
   if(hb) hb.style.display = isMerged ? 'none' : 'flex';
+  const mtr = document.getElementById('mergedToolsRow');
+  if(mtr) mtr.style.display = isMerged ? 'block' : 'none';
   _archiveShipFilter = null;
   archiveSelectedIds = new Set();
   await renderArchive();
@@ -3899,7 +4104,7 @@ async function filterByShip(ship){
 }
 
 // 船名サマリーの「乗船 X件」「下船 Y件」をタップした時の処理
-// 該当PDFが1件だけならそのままプレビュー表示、複数あれば一覧を絞り込んで表示
+// 1件でも複数件でも一覧を絞り込み、絞り込んだ結果が見える位置まで自動でスクロールする
 async function filterByShipCategory(ship, category){
   try{
     // 既に同じ絞り込み中なら、もう一度タップで解除（元の一覧に戻す）
@@ -3907,16 +4112,15 @@ async function filterByShipCategory(ship, category){
       await filterByShip(null);
       return;
     }
-    const allRecords = (await getAllArchive()).filter(r => r.type !== 'merged');
-    const matches = allRecords.filter(r => extractShipName(r.filename) === ship && _recCat(r) === category);
-    if(matches.length === 1){
-      await previewArchiveItem(matches[0].id);
-      return;
-    }
     _archiveShipFilter = { ship, category };
     archiveSelectedIds = new Set();
     await renderArchive();
     _keepShipSummaryOpen();
+    // 絞り込んだ一覧が見えるように、下へスクロール
+    setTimeout(()=>{
+      const list = document.getElementById('archiveList');
+      if(list) list.scrollIntoView({behavior:'smooth', block:'start'});
+    }, 60);
   }catch(e){
     alert('絞り込みに失敗しました: ' + e.message);
   }
@@ -4377,14 +4581,36 @@ async function _rasterizeInto(mergedDoc, bytes){
   return n;
 }
 
+// 結合用：PDF内の「Date: 2026/Nov/17」を YYYY-MM-DD にする（読めなければ保存日を使う）
+async function _voucherDateForMerge(bytes, rec){
+  const MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const pad = n => String(n).padStart(2,'0');
+  try{
+    const info = await extractVoucherInfo(bytes);
+    const m = info && info.date && info.date.match(/^(\d{4})\/([A-Za-z]{3})\/(\d{1,2})$/);
+    if(m && MON[m[2].toLowerCase()]) return `${m[1]}-${pad(MON[m[2].toLowerCase()])}-${pad(+m[3])}`;
+  }catch(e){ console.warn('日付の読み取りに失敗:', e); }
+  if(rec && rec.savedAt){
+    const d = new Date(rec.savedAt);
+    if(!isNaN(d)) return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  return null;
+}
+
 async function mergeAndDownloadSelected(){
   if(archiveSelectedIds.size === 0) return;
   const btn = document.querySelector('.archive-bulk-merge');
   if(btn){ btn.textContent = '結合中...'; btn.disabled = true; }
+  let fx = {finish:async()=>{}, abort:()=>{}};
+  const _fxAlert = (m)=>{ fx.abort(); alert(m); };
   try{
     const ids = [...archiveSelectedIds];
+    let _fxLabels = ids;
+    try{ const _ix = await _getVoucherIndex(); _fxLabels = ids.map(i=>(_ix[i]&&_ix[i].filename)||i); }catch(_){}
+    fx = FusionFX.start(_fxLabels);
     const mergedDoc = await PDFLib.PDFDocument.create();
     let firstRecord = null;
+    const _mergeDates = [];  // 結合できた各PDFの日付（最も古いものを結合ファイルの日付にする）
     const mergedIds = [];    // 実際にページを結合できたレコードのID（削除してよいもの）
     const failedNames = [];  // 読み込み・結合に失敗したファイル名（一覧から残す）
     let expectedTotal = 0;   // 結合できた各PDFのページ数の合計（結合結果と照合する）
@@ -4432,24 +4658,25 @@ async function mergeAndDownloadSelected(){
       if(ok){
         expectedTotal += added;
         mergedIds.push(id);
+        const _d = await _voucherDateForMerge(bytes, r); if(_d) _mergeDates.push(_d);
       } else {
         failedNames.push(r.filename);
       }
     }
 
     if(mergedDoc.getPageCount() === 0){
-      alert('結合できるページがありませんでした' + (failedNames.length ? `\n\n失敗したファイル:\n${failedNames.join('\n')}` : ''));
+      _fxAlert('結合できるページがありませんでした' + (failedNames.length ? `\n\n失敗したファイル:\n${failedNames.join('\n')}` : ''));
       return;
     }
 
     // ── 一部のPDFが結合できなかった場合は、保存・ダウンロードの前に必ず知らせる ──
     if(failedNames.length > 0){
-      alert(`⚠️ 以下のPDFは読み込みに失敗したため、結合結果に含まれていません：\n\n${failedNames.join('\n')}\n\nこれらは一覧に残したままにします。`);
+      _fxAlert(`⚠️ 以下のPDFは読み込みに失敗したため、結合結果に含まれていません：\n\n${failedNames.join('\n')}\n\nこれらは一覧に残したままにします。`);
     }
 
     // ── 検証：結合結果のページ数が、各PDFのページ数の合計と一致しなければ中止（元PDFは一切消さない） ──
     if(mergedDoc.getPageCount() !== expectedTotal){
-      alert(`⚠️ 結合結果のページ数が合いません（期待${expectedTotal}ページ／実際${mergedDoc.getPageCount()}ページ）。\n安全のため、保存と元PDFの削除は行いませんでした。`);
+      _fxAlert(`⚠️ 結合結果のページ数が合いません（期待${expectedTotal}ページ／実際${mergedDoc.getPageCount()}ページ）。\n安全のため、保存と元PDFの削除は行いませんでした。`);
       return;
     }
 
@@ -4460,19 +4687,20 @@ async function mergeAndDownloadSelected(){
     const mergedFilename = `${firstName}_他${mergedIds.length}件_merged.pdf`;
 
     // ── 結合したPDFを自動で「署名済み一覧」に保存（再アップロード不要にする） ──
-    // 保存日は「結合した日（今日）」をそのまま使う（時刻は付けず日付のみ）
+    // 保存日は「結合したバウチャーの中で最も古い日付」を使う（時刻は付けず日付のみ）
     const now = new Date();
-    const mergedDateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const mergedDateStr = _mergeDates.length ? [..._mergeDates].sort()[0] : todayStr;
     let newId = null;
     try{
       newId = await saveToArchive(out, mergedFilename, 'merged', mergedDateStr);
     }catch(saveErr){
       console.error('結合PDFの保存に失敗:', saveErr);
-      alert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
+      _fxAlert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
     }
 
     if(!newId){
-      alert('結合ファイルが一覧に保存されなかったため、元のPDFは削除せずに残しました。');
+      _fxAlert('結合ファイルが一覧に保存されなかったため、元のPDFは削除せずに残しました。');
     }
 
     // ── 保存に成功した場合のみ、実際に結合できたPDFだけを一覧から削除する ──
@@ -4482,7 +4710,7 @@ async function mergeAndDownloadSelected(){
       try{ await deleteArchiveIds(mergedIds); }
       catch(delErr){
         console.error('結合元PDFの削除に失敗:', delErr);
-        alert('⚠️ 結合ファイルは保存できましたが、元のPDFの削除に失敗しました。\n一覧から手動で削除してください。\n' + delErr.message);
+        _fxAlert('⚠️ 結合ファイルは保存できましたが、元のPDFの削除に失敗しました。\n一覧から手動で削除してください。\n' + delErr.message);
       }
     }
 
@@ -4502,6 +4730,7 @@ async function mergeAndDownloadSelected(){
     archiveSelectedIds = new Set();
     updateArchiveBulkBar();
     await renderArchive();
+    await fx.finish(mergedFilename, mergedDoc.getPageCount());
 
     // 手元にも残せるようダウンロード（最後に実行）
     const blob = new Blob([out], {type:'application/pdf'});
@@ -4511,8 +4740,9 @@ async function mergeAndDownloadSelected(){
     a.href = url; a.click();
     setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }catch(e){
-    alert('結合に失敗しました: ' + e.message);
+    _fxAlert('結合に失敗しました: ' + e.message);
   }finally{
+    fx.abort();
     if(btn){ btn.textContent = '📑 1つに結合'; btn.disabled = false; }
   }
 }
@@ -4782,6 +5012,125 @@ refreshPendingBanner();
       if(navigator.vibrate) navigator.vibrate(8);
     }catch(_){}
   },{passive:true});
+})();
+</script>
+<script>
+/* 融合エフェクト：渦巻く粒子＋カード吸い込み → 収束 → フラッシュ → 結果カード */
+const FusionFX = (function(){
+  let el=null, t0=0, active=false, raf=0, st=null;
+  const reduce = ()=> window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sleep = ms => new Promise(r=>setTimeout(r,ms));
+  function vib(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(_){} }
+
+  function runCanvas(cv){
+    const dpr = Math.min(2, window.devicePixelRatio||1);
+    const W = cv.width = Math.round(cv.clientWidth*dpr), H = cv.height = Math.round(cv.clientHeight*dpr);
+    const ctx = cv.getContext('2d'); const cx=W/2, cy=H*0.46;
+    const maxR = Math.hypot(W,H)*0.55;
+    st = {collapse:0, boost:1};
+    const N = 260, ps=[];
+    const hues=[275,290,200,45,320];
+    function spawn(p, init){
+      p.r = maxR*(init ? (0.08+Math.random()*0.95) : (0.75+Math.random()*0.3));
+      p.th = Math.random()*Math.PI*2;
+      p.hue = hues[(Math.random()*hues.length)|0];
+      p.w = 0.6+Math.random()*1.8; p.sp = 0.6+Math.random()*0.8; p.px=null; p.py=null;
+      return p;
+    }
+    for(let i=0;i<N;i++) ps.push(spawn({},true));
+    let last=performance.now(), tm=0;
+    function frame(now){
+      if(!el) return;
+      const dt = Math.min(0.05,(now-last)/1000); last=now; tm+=dt;
+      // 時間とともに加速（渦がどんどん速くなる）
+      const ramp = 1 + Math.min(tm,2.4)*1.1 + st.collapse*7;
+      ctx.globalCompositeOperation='destination-out';
+      ctx.fillStyle='rgba(0,0,0,'+(0.16+st.collapse*0.1)+')'; ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
+      for(const p of ps){
+        const nr = Math.max(0.04, p.r/maxR);
+        // 中心に近いほど角速度が大きい（渦の形）
+        const om = (0.55/(nr+0.12)) * ramp * 0.55 * p.sp;
+        p.th += om*dt;
+        p.r -= maxR*(0.16+0.1*p.sp)*ramp*dt*(0.35+nr);
+        const x = cx + Math.cos(p.th)*p.r*1.0, y = cy + Math.sin(p.th)*p.r*0.62*1.0 + Math.sin(p.th)*p.r*0.0;
+        if(p.px!==null){
+          const a = Math.min(1,0.25+(1-nr)*1.1);
+          ctx.strokeStyle='hsla('+p.hue+',95%,'+(60+ (1-nr)*30)+'%,'+a+')';
+          ctx.lineWidth = (p.w*dpr)*(0.6+(1-nr)*1.6);
+          ctx.beginPath(); ctx.moveTo(p.px,p.py); ctx.lineTo(x,y); ctx.stroke();
+        }
+        p.px=x; p.py=y;
+        if(p.r < maxR*0.025){ if(st.collapse<0.5){ spawn(p,false); } else { p.r=maxR*0.02; } }
+      }
+      // 中心の輝き
+      const g = ctx.createRadialGradient(cx,cy,0,cx,cy,90*dpr*(1+st.collapse*1.8));
+      g.addColorStop(0,'rgba(255,255,255,'+(0.5+st.collapse*0.5)+')'); g.addColorStop(1,'rgba(168,85,247,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,90*dpr*(1+st.collapse*1.8),0,7); ctx.fill();
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start(labels){
+    if(active || reduce()) return {finish:async()=>{}, abort:()=>{}};
+    active = true; t0 = Date.now();
+    el = document.createElement('div'); el.id='fusionFx';
+    const n = Math.max(2, Math.min(6, (labels||[]).length || 2));
+    let cards='';
+    for(let k=0;k<n;k++){
+      cards += `<div class="fx-card" style="--a:${Math.round(360/n*k)}deg;--r:${135+(k%2)*20}px;--d:${(k*0.12).toFixed(2)}s">📄</div>`;
+    }
+    let sparks='';
+    for(let k=0;k<26;k++){
+      const ang = Math.random()*Math.PI*2, dist = 110+Math.random()*150;
+      sparks += `<div class="fx-spark" style="--dx:${Math.round(Math.cos(ang)*dist)}px;--dy:${Math.round(Math.sin(ang)*dist)}px"></div>`;
+    }
+    el.innerHTML = `<canvas class="fx-canvas"></canvas><div class="fx-title">融　合</div>
+      <div class="fx-stage"><div class="fx-ring r1"></div><div class="fx-ring r2"></div><div class="fx-core"></div>${cards}
+      <div class="fx-result"><div class="rs-icon">📑</div><div class="rs-title"></div><div class="rs-meta"></div></div>${sparks}</div>
+      <div class="fx-label">融合中…</div><div class="fx-flash"></div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(()=>{ el.classList.add('show'); try{ runCanvas(el.querySelector('.fx-canvas')); }catch(_){} });
+    vib([20,40,20]);
+    let skip=false; el.addEventListener('click',()=>{ skip=true; });
+    return {
+      async finish(name, pages){
+        if(!el) return;
+        const wait = 2300 - (Date.now()-t0);
+        if(wait>0) await sleep(wait);
+        // 収束フェーズ：渦が一気に中心へ吸い込まれ、画面が震える
+        if(st) st.collapse = 1;
+        el.classList.add('shake'); vib([15,20,25,20,40]);
+        await sleep(550);
+        const flash = el.querySelector('.fx-flash');
+        flash.classList.add('go'); vib([30,30,60]);
+        await sleep(260);
+        el.classList.remove('shake');
+        cancelAnimationFrame(raf);
+        const cv = el.querySelector('.fx-canvas'); if(cv) cv.style.display='none';
+        el.querySelectorAll('.fx-card,.fx-ring,.fx-core').forEach(x=>x.style.display='none');
+        el.querySelector('.fx-label').style.display='none';
+        const rs = el.querySelector('.fx-result');
+        rs.querySelector('.rs-title').textContent = String(name||'').replace(/\.pdf$/i,'');
+        rs.querySelector('.rs-meta').textContent = pages ? pages+'ページ' : '';
+        rs.classList.add('go');
+        el.querySelector('.fx-title').classList.add('go');
+        el.querySelectorAll('.fx-spark').forEach(x=>x.classList.add('go'));
+        for(let w=0; w<18 && !skip; w++) await sleep(100);
+        close();
+      },
+      abort(){ close(); }
+    };
+  }
+  function close(){
+    cancelAnimationFrame(raf);
+    if(!el) return;
+    const e=el; el=null; active=false;
+    e.classList.remove('show');
+    setTimeout(()=>{ try{e.remove();}catch(_){} },400);
+  }
+  return {start};
 })();
 </script>
 </body>
