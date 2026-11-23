@@ -594,11 +594,32 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.51</span>
+          <span class="version-current">v4.53</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.53</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合ファイル：添付した領収書を剥がして元に戻せる「🧾 領収書を剥がす」を追加（貼り付けは元のページに、ページ結合は追加ページを削除）。これから添付する分が対象です</li>
+            <li>ページ編集を保存すると、ページの位置が変わるため、それ以前の領収書の取り外し記録は破棄されます</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.52</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合ファイルの領収書添付：貼り付け先のバウチャーを選んだあと、署名済み一覧と同じように「バウチャーに貼り付け」か「ページ結合（次に別ページとして追加）」を選べるように</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.51</span>
@@ -5059,6 +5080,8 @@ async function previewArchiveItem(id){
     if(_umb) _umb.style.display = (r.type === 'merged') ? 'inline-block' : 'none';
     const _rcb = document.getElementById('pdfPreviewReceiptBtn');
     if(_rcb) _rcb.style.display = (r.type === 'merged') ? 'inline-block' : 'none';
+    // 剥がせる領収書（貼り付けの記録）があるときだけ「領収書を剥がす」を表示
+    if(r.type === 'merged'){ _rcBackups(id).then(l => { const ub = document.getElementById('pdfPreviewReceiptUndoBtn'); if(ub && _previewArchiveId === id) ub.style.display = l.length ? 'inline-block' : 'none'; }).catch(()=>{}); }
     const _mvb = document.getElementById('pdfPreviewMoveBtn');
     if(_mvb) _mvb.style.display = (r.type !== 'merged') ? 'inline-block' : 'none';
   }catch(e){
@@ -5081,6 +5104,7 @@ function _openPdfPreviewFromBytes(bytes, filename){
     if(editBtn) editBtn.style.display = _previewArchiveId ? 'inline-block' : 'none';
     const umBtn = document.getElementById('pdfPreviewUnmergeBtn'); if(umBtn) umBtn.style.display = 'none';
     const rcBtn0 = document.getElementById('pdfPreviewReceiptBtn'); if(rcBtn0) rcBtn0.style.display = 'none';
+    const rcUn0 = document.getElementById('pdfPreviewReceiptUndoBtn'); if(rcUn0) rcUn0.style.display = 'none';
     const mvBtn = document.getElementById('pdfPreviewMoveBtn'); if(mvBtn) mvBtn.style.display = 'none';
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
@@ -5385,6 +5409,7 @@ async function savePagesEditor(){
     const newFl = await _detectFlags(outBytes);
     if(newFl !== null){ await db.collection('vouchers').doc(id).update({ isVM: newFl.vm, ranks: newFl.ranks }); }
     await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newFl ? newFl.vm : null, ranks: newFl ? newFl.ranks : null });
+    await _clearReceiptBackups(id);   // ページの位置が変わるため、領収書の取り外し記録はここで破棄する
 
     alert(`保存しました（${msg.join('、')}／現在${kept.length}ページ）`);
     // 保存後も「今の状態」のまま：一覧のスクロール位置・選択中の行（👁の水色）・開いているプレビューを維持し、更新後のPDFを表示し直す
@@ -5480,6 +5505,125 @@ async function _embedReceiptOnPage(doc, pageIdx, pdfBytes, rc){
   return true;
 }
 
+/* ── 結合ファイル：領収書の添付・取り外し（「元に戻す」用のバックアップ） ──
+   添付時に、貼り付け前の元ページ（または追加ページの位置）を app_meta/rcbk_… に記録しておき、あとから剥がせるようにする */
+const _RCBK = 'app_meta';
+async function _rcBackups(id){
+  const db = await getFirestore();
+  const snap = await db.collection(_RCBK).where('recordId','==',id).get();
+  return snap.docs.map(d => ({ ref: d.ref, docId: d.id, ...d.data() })).sort((a,b) => String(a.at).localeCompare(String(b.at)));
+}
+async function _rcShiftBackups(id, afterIdx, delta, exceptDocId){
+  for(const b of await _rcBackups(id)){
+    if(b.docId !== exceptDocId && b.pageIndex > afterIdx){ try{ await b.ref.update({ pageIndex: b.pageIndex + delta }); }catch(e){} }
+  }
+}
+async function _clearReceiptBackups(id){
+  try{ for(const b of await _rcBackups(id)){ try{ await b.ref.delete(); }catch(e){} } }catch(e){ console.warn('領収書バックアップの削除に失敗（無視）:', e); }
+}
+
+// 結合ファイルのPDFを、同じレコードに上書き保存（チェックサム・インデックス・VM/ランク判定・「元に戻す」記録も更新）
+async function _saveBytesInPlace(id, outBytes, nBefore, mpFn){
+  const db = await getFirestore();
+  const FV = firebase.firestore.FieldValue;
+  const newChecksum = _pdfChecksum(outBytes), b64 = uint8ToBase64(outBytes);
+  let oldChunks = 0; try{ const ix = await _getVoucherIndex(); oldChunks = (ix[id] && ix[id].chunks) || 0; }catch(e){}
+  let fields, newChunks = 0;
+  if(b64.length + 600 > INLINE_LIMIT){ newChunks = await _writeChunks(db, id, b64); fields = { pdfChunkCount: newChunks, pdfBase64: FV.delete(), checksum: newChecksum }; }
+  else { fields = { pdfBase64: b64, pdfChunkCount: FV.delete(), checksum: newChecksum }; }
+  if(mpFn){
+    try{
+      const cur = await db.collection('vouchers').doc(id).get(); const mp = cur.exists ? cur.data().mergeParts : null;
+      if(Array.isArray(mp) && mp.reduce((a,x)=>a+(x.pages||0),0) === nBefore){ const nm = mpFn(mp); if(nm) fields.mergeParts = nm; }
+    }catch(e){ console.warn('mergeParts更新失敗（無視）:', e); }
+  }
+  await db.collection('vouchers').doc(id).update(fields);
+  if(oldChunks > newChunks){ for(let i=newChunks;i<oldChunks;i++){ try{ await db.collection('vouchers_chunks').doc(`${id}_${i}`).delete(); }catch(e){} } }
+  const fl = await _detectFlags(outBytes);
+  if(fl !== null){ await db.collection('vouchers').doc(id).update({ isVM: fl.vm, ranks: fl.ranks }); }
+  await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: fl ? fl.vm : null, ranks: fl ? fl.ranks : null });
+}
+
+// 保存後も今の状態のまま（プレビュー・選択行・スクロール位置を維持）で表示を更新
+async function _refreshKeepState(id){
+  const els = [document.scrollingElement, document.querySelector('.body'), document.getElementById('archiveScreen'), document.getElementById('archiveList')].filter(Boolean);
+  const keep = els.map(el => el.scrollTop);
+  _mvPendingRatio = _mvScrollRatio();
+  await renderArchive();
+  els.forEach((el,i) => { el.scrollTop = keep[i]; });
+  await previewArchiveItem(id);
+  els.forEach((el,i) => { el.scrollTop = keep[i]; });
+}
+
+// 剥がす領収書を選ぶ
+function _receiptUndoPick(list){
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    const fmt = iso => { try{ const d = new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }catch(e){ return ''; } };
+    ov.innerHTML = `<div class="dlc-box" style="max-height:80vh;overflow:auto;">
+      <div class="dlc-title">🧾 剥がす領収書を選択</div>
+      <div class="dlc-sub">選んだ領収書を取り外し、元のバウチャーに戻します</div>
+      ${list.map((b,i) => `<button class="dlc-btn btn-merge" data-i="${i}"><div class="dlc-btn-title">${b.pageIndex+1}ページ目：${b.mode==='embed'?'貼り付け':'ページ結合（次ページ'+(b.count>1?'から'+b.count+'ページ':'')+'）'}</div><div class="dlc-btn-desc">${escHtml(b.name||'領収書')}（${fmt(b.at)}に添付）</div></button>`).join('')}
+      <button class="dlc-cancel" data-i="">キャンセル</button></div>`;
+    ov.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if(!b) return; ov.remove(); resolve(b.dataset.i === '' ? null : list[+b.dataset.i]); });
+    document.body.appendChild(ov);
+  });
+}
+
+// 領収書を剥がして、元のバウチャーに戻す
+async function undoReceiptOnMerged(id){
+  id = id || _previewArchiveId; if(!id) return;
+  try{
+    const list = await _rcBackups(id);
+    if(list.length === 0){ alert('このファイルには、剥がせる領収書の記録がありません。\n（この機能を入れる前に添付した領収書は剥がせません）'); return; }
+    const pick = await _receiptUndoPick(list); if(!pick) return;
+    if(!confirm(`${pick.pageIndex+1}ページ目の領収書を剥がして、元に戻します。\nよろしいですか？`)) return;
+    const r = await getArchiveById(id);
+    if(!r || (!r.pdfBase64 && !r.pdfBytes)){ alert('PDFデータが見つかりませんでした'); return; }
+    const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : r.pdfBytes;
+    const doc = await PDFLib.PDFDocument.load(bytes, {throwOnInvalidObject:false, updateMetadata:false, ignoreEncryption:true});
+    const n = doc.getPageCount();
+    if(pick.mode === 'embed'){
+      if(pick.pageIndex >= n || !pick.origB64){ alert('元のページが見つからないため、剥がせませんでした'); return; }
+      const origDoc = await PDFLib.PDFDocument.load(base64ToUint8(pick.origB64));
+      doc.removePage(pick.pageIndex);
+      const [op] = await doc.copyPages(origDoc, [0]);
+      doc.insertPage(pick.pageIndex, op);
+    } else {
+      if(pick.pageIndex + pick.count >= n){ alert('領収書のページが見つからないため、剥がせませんでした'); return; }
+      for(let k=0;k<pick.count;k++) doc.removePage(pick.pageIndex + 1);
+    }
+    const outBytes = new Uint8Array(await doc.save());
+    await _saveBytesInPlace(id, outBytes, n, pick.mode === 'merge' ? (mp => {
+      let at = 0; return mp.map(x => { const has = pick.pageIndex >= at && pick.pageIndex < at + x.pages; at += x.pages; return has ? { ...x, pages: Math.max(1, x.pages - pick.count) } : x; });
+    }) : null);
+    try{ await pick.ref.delete(); }catch(e){}
+    if(pick.mode === 'merge') await _rcShiftBackups(id, pick.pageIndex, -pick.count, pick.docId);
+    await _refreshKeepState(id);
+    alert(`${pick.pageIndex+1}ページ目の領収書を剥がしました`);
+  }catch(e){
+    console.error('領収書を剥がす処理に失敗:', e);
+    alert('領収書を剥がせませんでした: ' + e.message);
+  }
+}
+
+// 「埋め込み」か「ページ結合」かを選ぶ（署名済み一覧の領収書添付と同じ選択）。選んだ方式、キャンセルは null
+function _receiptChooseMode(pageNo){
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    ov.innerHTML = `<div class="dlc-box">
+        <div class="dlc-title">🧾 領収書の添付方法を選択</div>
+        <div class="dlc-sub">${pageNo}ページ目のバウチャーに添付します</div>
+        <button class="dlc-btn btn-embed" data-m="embed"><div class="dlc-btn-title">🧾 バウチャーに貼り付け</div><div class="dlc-btn-desc">そのバウチャーの空きスペースに領収書を配置（ページ数は増えません）</div></button>
+        <button class="dlc-btn btn-merge" data-m="merge"><div class="dlc-btn-title">📑 ページ結合</div><div class="dlc-btn-desc">そのバウチャーの次に、領収書を別ページとして追加</div></button>
+        <button class="dlc-cancel" data-m="">キャンセル</button></div>`;
+    ov.addEventListener('click', e => { const b = e.target.closest('[data-m]'); if(!b) return; ov.remove(); resolve(b.dataset.m || null); });
+    document.body.appendChild(ov);
+  });
+}
+
 // ※ファイル選択を押した直後（ユーザー操作の中）で開く必要があるため、ここでは先にファイル選択を出す
 function attachReceiptToMerged(id){
   id = id || _previewArchiveId; if(!id) return;
@@ -5499,54 +5643,63 @@ function attachReceiptToMerged(id){
       const n = doc.getPageCount();
       let target = 0;
       if(n > 1){ target = await _receiptPickPage(bytes, f.name); if(target === null) return; }
-      let addedPage = false;
-      if(!(await _embedReceiptOnPage(doc, target, bytes, rc))){
-        if(!confirm(`${target+1}ページ目には領収書を貼る空きスペースがありません。\n\nそのページの次に、領収書を1ページ（A4）として追加しますか？`)) return;
-        // 空きがない場合：選んだページのすぐ後ろに、A4の1ページとして追加
+      const mode = await _receiptChooseMode(target + 1);
+      if(!mode) return;
+      let addedPages = 0;
+      let doMerge = (mode === 'merge');
+      let origB64 = null;   // 貼り付け前の元ページ（あとで剥がすために保存）
+      if(!doMerge){
+        const tmp = await PDFLib.PDFDocument.create(); const [op] = await tmp.copyPages(doc, [target]); tmp.addPage(op);
+        origB64 = uint8ToBase64(new Uint8Array(await tmp.save()));
+      }
+      if(!doMerge && !(await _embedReceiptOnPage(doc, target, bytes, rc))){
+        if(!confirm(`${target+1}ページ目には領収書を貼る空きスペースがありません。\n\nそのページの次に、領収書を別ページとして追加しますか？`)) return;
+        doMerge = true; origB64 = null;
+      }
+      if(doMerge){
+        // そのバウチャーのすぐ後ろに、A4の別ページとして領収書を追加（PDFの領収書は全ページ）
         const A4W = 595, A4H = 842, mg = 30;
-        const np = doc.insertPage(target + 1, [A4W, A4H]);
         if(rc.isPdf){
-          const rdoc = await PDFLib.PDFDocument.load(rc.bytes); const [emb] = await doc.embedPages([rdoc.getPages()[0]]); const d = emb.size();
-          const sc = Math.min((A4W-mg*2)/d.width, (A4H-mg*2)/d.height); np.drawPage(emb, { x:(A4W-d.width*sc)/2, y:(A4H-d.height*sc)/2, width:d.width*sc, height:d.height*sc });
+          const rdoc = await PDFLib.PDFDocument.load(rc.bytes);
+          const rn = rdoc.getPageCount();
+          for(let k=0;k<rn;k++){
+            const [emb] = await doc.embedPages([rdoc.getPages()[k]]); const d = emb.size();
+            const sc = Math.min((A4W-mg*2)/d.width, (A4H-mg*2)/d.height);
+            const np = doc.insertPage(target + 1 + k, [A4W, A4H]);
+            np.drawPage(emb, { x:(A4W-d.width*sc)/2, y:(A4H-d.height*sc)/2, width:d.width*sc, height:d.height*sc });
+            addedPages++;
+          }
         } else {
           const im = rc.png ? await doc.embedPng(rc.bytes) : await doc.embedJpg(rc.bytes); const d = im.scale(1);
-          const sc = Math.min((A4W-mg*2)/d.width, (A4H-mg*2)/d.height, 1); np.drawImage(im, { x:(A4W-d.width*sc)/2, y:(A4H-d.height*sc)/2, width:d.width*sc, height:d.height*sc });
+          const sc = Math.min((A4W-mg*2)/d.width, (A4H-mg*2)/d.height, 1);
+          const np = doc.insertPage(target + 1, [A4W, A4H]);
+          np.drawImage(im, { x:(A4W-d.width*sc)/2, y:(A4H-d.height*sc)/2, width:d.width*sc, height:d.height*sc });
+          addedPages = 1;
         }
-        addedPage = true;
       }
       const outBytes = new Uint8Array(await doc.save());
 
       // ── 同じ結合ファイルに上書き保存（チェックサム・インデックス・「元に戻す」用の記録も更新） ──
-      const db = await getFirestore();
-      const FV = firebase.firestore.FieldValue;
-      const newChecksum = _pdfChecksum(outBytes), b64 = uint8ToBase64(outBytes);
-      let oldChunks = 0; try{ const ix = await _getVoucherIndex(); oldChunks = (ix[id] && ix[id].chunks) || 0; }catch(e){}
-      let fields, newChunks = 0;
-      if(b64.length + 600 > INLINE_LIMIT){ newChunks = await _writeChunks(db, id, b64); fields = { pdfChunkCount: newChunks, pdfBase64: FV.delete(), checksum: newChecksum }; }
-      else { fields = { pdfBase64: b64, pdfChunkCount: FV.delete(), checksum: newChecksum }; }
-      if(addedPage){
-        try{
-          const cur = await db.collection('vouchers').doc(id).get(); const mp = cur.exists ? cur.data().mergeParts : null;
-          if(Array.isArray(mp) && mp.reduce((a,x)=>a+(x.pages||0),0) === n){
-            let at = 0; fields.mergeParts = mp.map(x => { const has = target >= at && target < at + x.pages; at += x.pages; return has ? { ...x, pages: x.pages + 1 } : x; });
-          }
-        }catch(e){ console.warn('mergeParts更新失敗（無視）:', e); }
-      }
-      await db.collection('vouchers').doc(id).update(fields);
-      if(oldChunks > newChunks){ for(let i=newChunks;i<oldChunks;i++){ try{ await db.collection('vouchers_chunks').doc(`${id}_${i}`).delete(); }catch(e){} } }
-      const fl = await _detectFlags(outBytes);
-      if(fl !== null){ await db.collection('vouchers').doc(id).update({ isVM: fl.vm, ranks: fl.ranks }); }
-      await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: fl ? fl.vm : null, ranks: fl ? fl.ranks : null });
+      await _saveBytesInPlace(id, outBytes, n, addedPages > 0 ? (mp => {
+        let at = 0; return mp.map(x => { const has = target >= at && target < at + x.pages; at += x.pages; return has ? { ...x, pages: x.pages + addedPages } : x; });
+      }) : null);
 
-      // 保存後も今の状態のまま（プレビュー・選択行・スクロール位置を維持）
-      const els = [document.scrollingElement, document.querySelector('.body'), document.getElementById('archiveScreen'), document.getElementById('archiveList')].filter(Boolean);
-      const keep = els.map(el => el.scrollTop);
-      _mvPendingRatio = _mvScrollRatio();
-      await renderArchive();
-      els.forEach((el,i) => { el.scrollTop = keep[i]; });
-      await previewArchiveItem(id);
-      els.forEach((el,i) => { el.scrollTop = keep[i]; });
-      alert(addedPage ? `${target+1}ページ目の次に領収書を1ページ追加して保存しました` : `${target+1}ページ目に領収書を貼り付けて保存しました`);
+      // ── あとで剥がせるように記録を残す ──
+      let canUndo = true;
+      try{
+        if(addedPages > 0) await _rcShiftBackups(id, target, addedPages);
+        if(origB64 !== null && origB64.length > 850000) canUndo = false;   // 元ページが大きすぎて記録できない
+        else{
+          const db = await getFirestore();
+          await db.collection(_RCBK).doc('rcbk_' + id + '_' + Date.now()).set({
+            recordId: id, mode: addedPages > 0 ? 'merge' : 'embed', pageIndex: target, count: addedPages,
+            at: new Date().toISOString(), name: f.name, ...(origB64 !== null ? { origB64 } : {})
+          });
+        }
+      }catch(e){ canUndo = false; console.warn('領収書の取り外し用記録に失敗:', e); }
+
+      await _refreshKeepState(id);
+      alert((addedPages > 0 ? `${target+1}ページ目の次に領収書を${addedPages}ページ追加して保存しました` : `${target+1}ページ目に領収書を貼り付けて保存しました`) + (canUndo ? '' : '\n\n※この領収書は、あとから剥がすための記録を残せませんでした'));
     }catch(e){
       console.error('領収書の添付に失敗:', e);
       alert('領収書の添付に失敗しました: ' + e.message);
@@ -5949,6 +6102,7 @@ refreshPendingBanner();
     <button id="pdfPreviewEditBtn" onclick="openPagesEditor()" style="display:none;">✏️ ページ編集</button>
     <button id="pdfPreviewMoveBtn" onclick="movePreviewToMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">📁 結合ファイルへ移動</button>
     <button id="pdfPreviewReceiptBtn" onclick="attachReceiptToMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">🧾 領収書を添付</button>
+    <button id="pdfPreviewReceiptUndoBtn" onclick="undoReceiptOnMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#92400e;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">🧾 領収書を剥がす</button>
     <button id="pdfPreviewUnmergeBtn" onclick="unmergeArchiveItem()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">↩ 元に戻す</button>
     <button id="pdfPreviewDlBtn" onclick="pdfPreviewDownload()">⬇ DL</button>
     <button id="pdfPreviewCloseBtn" onclick="closePdfPreview()">✕</button>
