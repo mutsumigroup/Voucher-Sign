@@ -540,11 +540,34 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.30</span>
+          <span class="version-current">v4.32</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.32</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>結合ファイルのプレビューに「↩ 元に戻す」を追加（誤って結合した場合に、個別PDFに分けて署名済み一覧へ戻す）</li>
+            <li>今後の結合は、元のファイル名・日付・種類を記録するので、元どおりに戻せます</li>
+            <li>重複は作らない：同名・同内容のPDFが既にあれば戻さずスキップして報告。途中で失敗したら取り消して結合ファイルを残します</li>
+          </ul>
+        </div>
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.31</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>署名済み一覧の各PDFに「📁 結合ファイルに移動」ボタンを追加（複数選択して一括移動も可能）</li>
+            <li>結合したときの自動ダウンロードを廃止。結合したら、そのまま結合ファイルに保存されます</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.30</span>
@@ -1194,6 +1217,7 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
         <span class="archive-bulk-count" id="archiveBulkCount">0件選択中</span>
         <div style="display:flex;gap:8px;">
           <button class="archive-bulk-dl" onclick="downloadSelectedArchive()">⬇ 個別DL</button>
+          <button class="archive-bulk-dl" id="bulkMoveMergedBtn" onclick="moveToMergedFiles([...archiveSelectedIds])">📁 結合ファイルへ移動</button>
           <button class="archive-bulk-merge" onclick="mergeAndDownloadSelected()">📑 1つに結合</button>
         </div>
       </div>
@@ -3115,7 +3139,8 @@ function _recCat(r){
   return r.isVM ? 'vm' : extractCategory(r.filename);
 }
 
-async function saveToArchive(pdfBytes, filename, type, customDate){
+async function saveToArchive(pdfBytes, filename, type, customDate, opts){
+  opts = opts || {};
   // type: 'sign' | 'receipt' | 'upload'
   // customDate: 'YYYY-MM-DD' string (optional, for upload type)
   try{
@@ -3131,6 +3156,7 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
       if(dupEntry){
         const dupDate = dupEntry.savedAt ? new Date(dupEntry.savedAt).toLocaleDateString('ja-JP') : '不明';
         const dupName = dupEntry.filename || '不明';
+        if(opts.silentDup) return null; // 元に戻す処理：重複は確認なしでスキップ
         const proceed = confirm(
           `⚠️ このPDFは既に保存されている可能性があります。\n\n` +
           `既存ファイル名: ${dupName}\n保存日: ${dupDate}\n\n` +
@@ -3161,6 +3187,7 @@ async function saveToArchive(pdfBytes, filename, type, customDate){
     };
     const vmFlag = await _detectVM(bytes);
     if(vmFlag !== null) record.isVM = vmFlag;
+    if(opts.extra) Object.assign(record, opts.extra);
     const docRef = db.collection('vouchers').doc();
     if(pdfBase64.length + filename.length + 300 > INLINE_LIMIT){
       // 大きいPDFは分割保存（先に分割データを書き、最後に親レコードを作る）
@@ -3343,6 +3370,130 @@ async function runMergedDupCheck(){
     body.innerHTML = html;
   }catch(e){
     console.error(e); say('チェックに失敗しました: ' + escHtml(e.message||String(e)));
+  }
+}
+
+
+/* ── 結合ファイルを元に戻す（署名済み一覧へ分割して戻す。重複は作らない） ── */
+let _unmerging = false;
+
+async function _pageTextsOf(bytes){
+  const out = [];
+  const doc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
+  for(let i=1;i<=doc.numPages;i++){
+    try{ const tc = await (await doc.getPage(i)).getTextContent(); out.push(tc.items.map(x=>x.str).join(' ').replace(/\s+/g,' ').trim()); }
+    catch(e){ out.push(''); }
+  }
+  return out;
+}
+
+async function unmergeArchiveItem(){
+  const id = _previewArchiveId;
+  if(!id || _unmerging) return;
+  _unmerging = true;
+  const btn = document.getElementById('pdfPreviewUnmergeBtn');
+  const setBtn = t => { if(btn){ btn.textContent = t; btn.disabled = (t !== '↩ 元に戻す'); } };
+  const savedIds = [];
+  try{
+    const rec = await getArchiveById(id);
+    if(!rec || rec.type !== 'merged'){ alert('結合ファイルではありません'); return; }
+    if(!confirm(`「${rec.filename}」を元の個別PDFに戻して、署名済み一覧へ保存します。\n\n結合ファイルは削除されます。よろしいですか？`)) return;
+    setBtn('処理中...');
+    const bytes = base64ToUint8(rec.pdfBase64);
+    const texts = await _pageTextsOf(bytes);
+    const total = texts.length;
+
+    // 元PDFの読み込み（ページ数が一致する方法で）
+    let srcDoc = null;
+    for(const v of ['raw','clean']){
+      try{
+        const useBytes = v==='raw' ? bytes : await cleanPdfBytes(bytes);
+        const d = await PDFLib.PDFDocument.load(useBytes, {ignoreEncryption:true, throwOnInvalidObject:false});
+        if(d.getPageCount() === total){ srcDoc = d; break; }
+      }catch(e){}
+    }
+    if(!srcDoc){ alert('PDFの読み込みに失敗したため、元に戻せませんでした（結合ファイルはそのまま残しています）'); return; }
+
+    // ── 分割の区切りを決める ──
+    let parts = [];   // {name,type,savedAt,dateOnly,confirmed,start,count,mergeParts}
+    const rp = Array.isArray(rec.mergeParts) ? rec.mergeParts : null;
+    if(rp && rp.length && rp.reduce((a,x)=>a+(x.pages||0),0) === total){
+      let at = 0;
+      rp.forEach(x => { parts.push({name:x.filename, type:x.type||'sign', savedAt:x.savedAt, dateOnly:!!x.dateOnly, confirmed:!!x.confirmed, start:at, count:x.pages, mergeParts:x.mergeParts||null}); at += x.pages; });
+    } else {
+      // 記録がない古い結合ファイル：バウチャーの先頭ページ（VOUCHER/RECEIPT）ごとに分割。後続ページ（領収書等）は直前のバウチャーに付ける
+      const isHead = t => /VOUCHER\s*\/\s*RECEIPT/i.test(t) || /Name of Vessel/i.test(t);
+      const starts = [];
+      texts.forEach((t,i)=>{ if(isHead(t)) starts.push(i); });
+      if(starts.length === 0 || starts[0] !== 0) starts.unshift(0);
+      starts.forEach((st,k)=>{
+        const en = (k+1<starts.length) ? starts[k+1] : total;
+        const head = texts[st] || '';
+        const info = _parseVoucherInfo(head);
+        const ship = (info.ship || '').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'');
+        const base = (rec.filename||'merged').replace(/\.pdf$/i,'').replace(/_他\d+件_merged.*$/,'').replace(/_merged.*$/,'');
+        let nm = ship ? `${ship}_${info.category||'Voucher'}${info.voucherNo?'_'+info.voucherNo:''}` : `${base}_${k+1}`;
+        parts.push({name: nm+'.pdf', type: (en-st>1)?'receipt':'sign', savedAt:null, dateOnly:false, confirmed:false, start:st, count:en-st, mergeParts:null, _info:info});
+      });
+    }
+
+    // ── 重複を作らないための確認材料 ──
+    const idx = await _getVoucherIndex();
+    const norm = n => String(n||'').replace(/\.pdf$/i,'').trim().toLowerCase();
+    const existing = new Set(Object.values(idx).filter(x=>x.type!=='merged').map(x=>norm(x.filename)));
+    const usedNames = new Set(); const seenFp = new Set();
+    const skipped = []; const created = [];
+
+    for(let k=0;k<parts.length;k++){
+      const pt = parts[k];
+      setBtn(`保存中 ${k+1}/${parts.length}`);
+      // 分割
+      const nd = await PDFLib.PDFDocument.create();
+      const idxs = Array.from({length:pt.count}, (_,i)=>pt.start+i);
+      const pgs = await nd.copyPages(srcDoc, idxs); pgs.forEach(x=>nd.addPage(x));
+      if(nd.getPageCount() !== pt.count) throw new Error('ページ数が合いません: ' + pt.name);
+      const out = new Uint8Array(await nd.save());
+      // 内容の重複（同じ1ページ目の内容）
+      const fpText = (texts[pt.start]||'').replace(/\s+/g,'').toLowerCase();
+      const fp = fpText.length >= 40 ? _fpHash(fpText) : null;
+      if(fp && seenFp.has(fp)){ skipped.push(pt.name + '（同じ内容が結合ファイル内に複数）'); continue; }
+      // 名前の重複（既に署名済み一覧にある）
+      let nm = pt.name;
+      if(existing.has(norm(nm))){ skipped.push(pt.name + '（一覧に同名あり）'); continue; }
+      let n2 = 2; while(usedNames.has(norm(nm))){ nm = pt.name.replace(/\.pdf$/i,'') + '_' + (n2++) + '.pdf'; }
+      // 日付：記録があれば元の日付、なければバウチャー内の日付→結合ファイルの日付
+      let extra = { confirmed: !!pt.confirmed };
+      let customDate;
+      if(pt.savedAt){ extra.savedAt = pt.savedAt; extra.dateOnly = !!pt.dateOnly; }
+      else {
+        const d = await _voucherDateForMerge(out, rec);
+        if(d){ customDate = d; } else { extra.savedAt = rec.savedAt; extra.dateOnly = !!rec.dateOnly; }
+      }
+      if(pt.mergeParts) extra.mergeParts = pt.mergeParts;
+      const newId = await saveToArchive(out, nm, pt.type === 'merged' ? 'merged' : pt.type, customDate, { extra, silentDup:true });
+      if(!newId){ skipped.push(nm + '（同じPDFが既にあります）'); continue; }
+      savedIds.push(newId); usedNames.add(norm(nm)); if(fp) seenFp.add(fp); created.push(nm);
+    }
+
+    if(created.length + skipped.length !== parts.length) throw new Error('分割結果の件数が合いません');
+    if(created.length === 0 && skipped.length > 0){
+      alert('すべて既に署名済み一覧にあるため、新しく戻したファイルはありません。結合ファイルはそのまま残しています。\n\n' + skipped.join('\n'));
+      return;
+    }
+    // すべて保存できた場合のみ、結合ファイルを削除
+    await deleteArchiveIds([id]);
+    closePdfPreview();
+    archiveSelectedIds = new Set();
+    await renderArchive();
+    alert(`✅ ${created.length}件を署名済み一覧に戻しました。` + (skipped.length ? `\n\n重複のため戻さなかったもの（${skipped.length}件）:\n${skipped.join('\n')}` : ''));
+  }catch(e){
+    console.error(e);
+    // 途中で失敗した場合は、作りかけの個別PDFを取り消して結合ファイルを残す
+    if(savedIds.length){ try{ await deleteArchiveIds(savedIds); }catch(x){ console.warn(x); } }
+    alert('元に戻す処理に失敗しました（結合ファイルはそのまま残しています）: ' + (e.message||e));
+    try{ await renderArchive(); }catch(_){}
+  }finally{
+    _unmerging = false; setBtn('↩ 元に戻す');
   }
 }
 
@@ -4177,6 +4328,7 @@ function renderArchiveItem(r){
         <button class="archive-item-confirm${confirmed?' confirmed':''}" onclick="toggleConfirmed('${r.id}', ${confirmed})" title="${confirmed?'確認済み':'未確認'}">✅</button>
         <button class="archive-item-rename" onclick="startRenameArchive('${r.id}')" title="ファイル名・日付を変更">✏️</button>
         <button class="archive-item-rename" style="border-color:#f59e0b;color:#d97706;" onclick="attachReceiptFromArchive('${r.id}')" title="領収書を添付">🧾</button>
+        ${r.type!=='merged' ? `<button class="archive-item-rename" style="border-color:#7c3aed;color:#7c3aed;" onclick="moveToMergedFiles(['${r.id}'])" title="結合ファイルに移動">📁</button>` : ''}
         <button class="archive-item-preview" onclick="previewArchiveItem('${r.id}')">👁</button>
         <button class="archive-item-del" onclick="deleteSingleArchive('${r.id}')">🗑</button>
       </div>
@@ -4263,6 +4415,27 @@ function toggleArchiveSelect(id){
   updateArchiveBulkBar();
 }
 
+
+// 選択したPDFを「結合ファイル」へ移動する（単体で結合の必要がないものを整理する用）
+async function moveToMergedFiles(ids){
+  ids = (ids||[]).filter(Boolean);
+  if(ids.length===0) return;
+  try{
+    const db = await getFirestore();
+    const idx = await _getVoucherIndex();
+    for(const id of ids){
+      await db.collection('vouchers').doc(id).update({ type: 'merged' });
+      const cur = idx[id];
+      if(cur) await _updateVoucherIndexEntry(id, { ...cur, type: 'merged' });
+    }
+    archiveSelectedIds = new Set();
+    updateArchiveBulkBar();
+    await renderArchive();
+  }catch(e){
+    alert('結合ファイルへの移動に失敗しました: ' + e.message);
+  }
+}
+
 function updateArchiveBulkBar(){
   const n = archiveSelectedIds.size;
   const bulkBar  = document.getElementById('archiveBulkBar');
@@ -4270,6 +4443,8 @@ function updateArchiveBulkBar(){
   if(bulkBar){
     bulkBar.style.display  = n > 0 ? 'block' : 'none';
     if(bulkCount) bulkCount.textContent = `${n}件選択中`;
+    const mvb = document.getElementById('bulkMoveMergedBtn');
+    if(mvb) mvb.style.display = (_archiveView === 'merged') ? 'none' : '';
   }
 }
 
@@ -4314,6 +4489,8 @@ async function previewArchiveItem(id){
     const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : (r.pdfBytes || new Uint8Array());
     _previewArchiveId = id;
     _openPdfPreviewFromBytes(bytes, r.filename);
+    const _umb = document.getElementById('pdfPreviewUnmergeBtn');
+    if(_umb) _umb.style.display = (r.type === 'merged') ? 'inline-block' : 'none';
   }catch(e){
     alert('プレビューに失敗しました: ' + e.message);
   }
@@ -4332,6 +4509,7 @@ function _openPdfPreviewFromBytes(bytes, filename){
     document.getElementById('pdfPreviewTitle').textContent = filename;
     const editBtn = document.getElementById('pdfPreviewEditBtn');
     if(editBtn) editBtn.style.display = _previewArchiveId ? 'inline-block' : 'none';
+    const umBtn = document.getElementById('pdfPreviewUnmergeBtn'); if(umBtn) umBtn.style.display = 'none';
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
 
@@ -4610,6 +4788,7 @@ async function mergeAndDownloadSelected(){
     fx = FusionFX.start(_fxLabels);
     const mergedDoc = await PDFLib.PDFDocument.create();
     let firstRecord = null;
+    const _mergeParts = [];  // 結合した各PDFの情報（あとで「元に戻す」ために結合ファイルへ記録）
     const _mergeDates = [];  // 結合できた各PDFの日付（最も古いものを結合ファイルの日付にする）
     const mergedIds = [];    // 実際にページを結合できたレコードのID（削除してよいもの）
     const failedNames = [];  // 読み込み・結合に失敗したファイル名（一覧から残す）
@@ -4659,6 +4838,9 @@ async function mergeAndDownloadSelected(){
         expectedTotal += added;
         mergedIds.push(id);
         const _d = await _voucherDateForMerge(bytes, r); if(_d) _mergeDates.push(_d);
+        _mergeParts.push({ filename: r.filename || '', type: r.type || 'sign', savedAt: r.savedAt || null,
+          dateOnly: !!r.dateOnly, confirmed: !!r.confirmed, pages: added,
+          mergeParts: Array.isArray(r.mergeParts) ? r.mergeParts : null });
       } else {
         failedNames.push(r.filename);
       }
@@ -4693,10 +4875,10 @@ async function mergeAndDownloadSelected(){
     const mergedDateStr = _mergeDates.length ? [..._mergeDates].sort()[0] : todayStr;
     let newId = null;
     try{
-      newId = await saveToArchive(out, mergedFilename, 'merged', mergedDateStr);
+      newId = await saveToArchive(out, mergedFilename, 'merged', mergedDateStr, { extra: { mergeParts: _mergeParts } });
     }catch(saveErr){
       console.error('結合PDFの保存に失敗:', saveErr);
-      _fxAlert('結合PDFの一覧への保存に失敗しました。ダウンロードのみ行います。\n' + saveErr.message);
+      _fxAlert('結合PDFの保存に失敗しました。\n' + saveErr.message);
     }
 
     if(!newId){
@@ -4732,13 +4914,6 @@ async function mergeAndDownloadSelected(){
     await renderArchive();
     await fx.finish(mergedFilename, mergedDoc.getPageCount());
 
-    // 手元にも残せるようダウンロード（最後に実行）
-    const blob = new Blob([out], {type:'application/pdf'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.download = mergedFilename;
-    a.href = url; a.click();
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }catch(e){
     _fxAlert('結合に失敗しました: ' + e.message);
   }finally{
@@ -4940,6 +5115,7 @@ refreshPendingBanner();
   <div id="pdfPreviewHeader">
     <div id="pdfPreviewTitle"></div>
     <button id="pdfPreviewEditBtn" onclick="openPagesEditor()" style="display:none;">🗑 ページ編集</button>
+    <button id="pdfPreviewUnmergeBtn" onclick="unmergeArchiveItem()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">↩ 元に戻す</button>
     <button id="pdfPreviewDlBtn" onclick="pdfPreviewDownload()">⬇ DL</button>
     <button id="pdfPreviewCloseBtn" onclick="closePdfPreview()">✕</button>
   </div>
