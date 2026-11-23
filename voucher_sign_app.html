@@ -306,9 +306,15 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .page-editor-thumb-mark{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;font-size:14px;}
 .page-editor-thumb.marked .page-editor-thumb-mark{background:#ef4444;color:#fff;}
 .page-editor-thumb.marked::after{content:'';position:absolute;inset:0;background:rgba(239,68,68,0.25);}
+#pageEditorAddBtn{padding:6px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;}
+.page-editor-thumb.added{border-color:#38bdf8;}
+.page-editor-thumb.dragover{border-color:#facc15;}
+.page-editor-mv{position:absolute;bottom:4px;width:32px;height:30px;border-radius:8px;border:none;background:rgba(15,23,42,.82);color:#fff;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.page-editor-mv.l{left:4px;} .page-editor-mv.r{right:4px;}
+.page-editor-mv:disabled{opacity:.3;cursor:default;}
 #pageEditorFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:#1e1b4b;flex-shrink:0;}
 #pageEditorFooterText{color:#cbd5e1;font-size:12px;flex:1;}
-#pageEditorSaveBtn{padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
+#pageEditorSaveBtn{padding:8px 16px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
 #pageEditorSaveBtn:disabled{background:#475569;cursor:default;}
 .archive-item-del{padding:6px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .archive-item-del:active{background:#fca5a5;}
@@ -588,11 +594,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.48</span>
+          <span class="version-current">v4.49</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.49</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>ページ編集：削除だけでなく「＋ ページを追加」（PDF／画像JPG・PNGを末尾に追加）と、ページの順番変更（◀ ▶ボタン、PCはドラッグも可）ができるように</li>
+            <li>署名済み一覧・結合ファイル、PC・スマホ共通。保存時に内容（削除・追加・順番変更）を確認してから保存します</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.48</span>
@@ -5086,128 +5103,207 @@ function pdfPreviewDownload(){
    ページ編集機能（結合などで複数ページになったPDFから
    不要なページだけを選んで削除する）
 ══════════════════════════════════════════ */
-let _pageEditor = null; // { id, filename, bytes, pageCount, markedPages:Set }
+let _pageEditor = null; // { id, filename, bytes, srcDoc, items:[], extra:[], uidSeq, marked:Set<uid> }
+
+function _peUpdateFooter(){
+  const pe = _pageEditor; if(!pe) return;
+  const saveBtn = document.getElementById('pageEditorSaveBtn');
+  const footerText = document.getElementById('pageEditorFooterText');
+  const kept = pe.items.filter(it => !pe.marked.has(it.uid));
+  const delOrig = pe.items.filter(it => it.src==='orig' && pe.marked.has(it.uid)).length;
+  const added = kept.filter(it => it.src==='add').length;
+  let ordChanged = false, last = -1;
+  for(const it of kept){ if(it.seq < last){ ordChanged = true; break; } last = it.seq; }
+  const parts = [];
+  if(delOrig) parts.push(`削除${delOrig}`);
+  if(added) parts.push(`追加${added}`);
+  if(ordChanged) parts.push('順番変更');
+  if(kept.length === 0){
+    saveBtn.disabled = true;
+    footerText.textContent = '⚠️ 全ページは削除できません（最低1ページは残してください）';
+  } else if(parts.length === 0){
+    saveBtn.disabled = true;
+    footerText.textContent = 'タップ＝削除する／戻す、◀ ▶＝順番を移動、「＋ ページを追加」＝PDF・画像を追加';
+  } else {
+    saveBtn.disabled = false;
+    footerText.textContent = `${parts.join('・')}（保存後は${kept.length}ページ）`;
+  }
+}
+
+function _peRender(){
+  const pe = _pageEditor; if(!pe) return;
+  const body = document.getElementById('pageEditorBody');
+  body.innerHTML = '';
+  pe.items.forEach((it, pos) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'page-editor-thumb' + (pe.marked.has(it.uid) ? ' marked' : '') + (it.src==='add' ? ' added' : '');
+    thumb.draggable = true;
+    thumb.dataset.pos = pos;
+    thumb.onclick = () => _peToggle(it.uid);
+    thumb.ondragstart = ev => { pe._drag = pos; try{ ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(pos)); }catch(e){} };
+    thumb.ondragover = ev => { ev.preventDefault(); thumb.classList.add('dragover'); };
+    thumb.ondragleave = () => thumb.classList.remove('dragover');
+    thumb.ondrop = ev => { ev.preventDefault(); thumb.classList.remove('dragover'); if(pe._drag !== undefined && pe._drag !== pos) _peMoveTo(pe._drag, pos); pe._drag = undefined; };
+    thumb.appendChild(it.canvas);
+    const label = document.createElement('div');
+    label.className = 'page-editor-thumb-label';
+    label.textContent = `${pos+1}` + (it.src==='add' ? '・追加' : '');
+    thumb.appendChild(label);
+    const mark = document.createElement('div');
+    mark.className = 'page-editor-thumb-mark'; mark.textContent = '🗑';
+    thumb.appendChild(mark);
+    const mkBtn = (txt, cls, fn, dis) => { const b = document.createElement('button'); b.className = 'page-editor-mv ' + cls; b.textContent = txt; b.disabled = !!dis;
+      b.onclick = ev => { ev.stopPropagation(); fn(); }; return b; };
+    thumb.appendChild(mkBtn('◀', 'l', () => _peMoveTo(pos, pos-1), pos === 0));
+    thumb.appendChild(mkBtn('▶', 'r', () => _peMoveTo(pos, pos+1), pos === pe.items.length-1));
+    body.appendChild(thumb);
+  });
+  _peUpdateFooter();
+}
+
+function _peMoveTo(from, to){
+  const pe = _pageEditor; if(!pe || to < 0 || to >= pe.items.length) return;
+  const [it] = pe.items.splice(from, 1);
+  pe.items.splice(to, 0, it);
+  _peRender();
+}
+
+function _peToggle(uid){
+  const pe = _pageEditor; if(!pe) return;
+  if(pe.marked.has(uid)) pe.marked.delete(uid); else pe.marked.add(uid);
+  _peRender();
+}
+
+async function _peThumbFromPdfPage(pdfjsDoc, n){
+  const page = await pdfjsDoc.getPage(n);
+  const vp1 = page.getViewport({scale:1});
+  const vp = page.getViewport({scale: 220 / vp1.width});
+  const canvas = document.createElement('canvas');
+  canvas.width = vp.width; canvas.height = vp.height;
+  await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+  return canvas;
+}
 
 async function openPagesEditor(){
   if(!_previewArchiveId) return;
   const id = _previewArchiveId;
   const body = document.getElementById('pageEditorBody');
   const saveBtn = document.getElementById('pageEditorSaveBtn');
-  const footerText = document.getElementById('pageEditorFooterText');
   const overlay = document.getElementById('pageEditorOverlay');
   const titleEl = document.getElementById('pageEditorTitle');
-
   try{
     const r = await getArchiveById(id);
     if(!r){ alert('データが見つかりませんでした'); return; }
     const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : new Uint8Array();
     if(!bytes.length){ alert('PDFデータが見つかりませんでした'); return; }
 
-    titleEl.textContent = 'ページを選んで削除：' + r.filename;
+    titleEl.textContent = 'ページ編集：' + r.filename;
     body.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">読み込み中...</div>';
     saveBtn.disabled = true;
-    footerText.textContent = '削除したいページをタップして選択してください';
+    document.getElementById('pageEditorFooterText').textContent = '読み込み中...';
     overlay.classList.add('open');
 
     const pdfjsDoc = await pdfjsLib.getDocument({data: bytes.slice(), stopAtErrors:false}).promise;
     const pageCount = pdfjsDoc.numPages;
-
-    _pageEditor = { id, filename: r.filename, bytes, pageCount, markedPages: new Set() };
-
-    if(pageCount <= 1){
-      body.innerHTML = '<div style="color:#fca5a5;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">このPDFは1ページのみのため、ページ削除はできません。</div>';
-      return;
-    }
-
-    body.innerHTML = '';
+    const srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true, throwOnInvalidObject:false});
+    _pageEditor = { id, filename: r.filename, bytes, srcDoc, pageCount, items: [], extra: [], uidSeq: 0, marked: new Set() };
     for(let i=1;i<=pageCount;i++){
-      const page = await pdfjsDoc.getPage(i);
-      const vp1 = page.getViewport({scale:1});
-      const scale = 220 / vp1.width;
-      const vp = page.getViewport({scale});
-      const canvas = document.createElement('canvas');
-      canvas.width = vp.width;
-      canvas.height = vp.height;
-      await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
-
-      const thumb = document.createElement('div');
-      thumb.className = 'page-editor-thumb';
-      thumb.id = 'pgthumb_' + i;
-      thumb.onclick = () => togglePageMark(i);
-      thumb.appendChild(canvas);
-      const label = document.createElement('div');
-      label.className = 'page-editor-thumb-label';
-      label.textContent = `${i} / ${pageCount}`;
-      thumb.appendChild(label);
-      const mark = document.createElement('div');
-      mark.className = 'page-editor-thumb-mark';
-      mark.textContent = '🗑';
-      thumb.appendChild(mark);
-      body.appendChild(thumb);
+      const canvas = await _peThumbFromPdfPage(pdfjsDoc, i);
+      const uid = ++_pageEditor.uidSeq;
+      _pageEditor.items.push({ uid, seq: uid, src:'orig', idx: i-1, canvas });
     }
+    _peRender();
   }catch(e){
     console.error('ページ編集の読み込みに失敗:', e);
     body.innerHTML = `<div style="color:#fca5a5;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">読み込みに失敗しました: ${escHtml(e.message)}</div>`;
   }
 }
 
-function togglePageMark(pageNum){
-  if(!_pageEditor) return;
-  const { markedPages, pageCount } = _pageEditor;
-  if(markedPages.has(pageNum)) markedPages.delete(pageNum);
-  else markedPages.add(pageNum);
-
-  const thumb = document.getElementById('pgthumb_' + pageNum);
-  if(thumb) thumb.classList.toggle('marked', markedPages.has(pageNum));
-
-  const saveBtn = document.getElementById('pageEditorSaveBtn');
+// ページを追加：PDF（全ページ）または画像（JPG/PNG）を末尾に追加。あとから ◀ ▶ で好きな位置へ移動できる
+async function peAddFiles(ev){
+  const pe = _pageEditor; const files = [...(ev.target.files || [])]; ev.target.value = '';
+  if(!pe || files.length === 0) return;
   const footerText = document.getElementById('pageEditorFooterText');
-  const n = markedPages.size;
-  if(n === 0){
-    saveBtn.disabled = true;
-    footerText.textContent = '削除したいページをタップして選択してください';
-  } else if(n >= pageCount){
-    // 全ページ削除は不可（PDFが空になってしまうため）
-    saveBtn.disabled = true;
-    footerText.textContent = '⚠️ 全ページは削除できません（最低1ページは残してください）';
-  } else {
-    saveBtn.disabled = false;
-    footerText.textContent = `${n}ページを削除します（残り${pageCount - n}ページ）`;
+  try{
+    for(const f of files){
+      footerText.textContent = `「${f.name}」を読み込み中...`;
+      const buf = new Uint8Array(await f.arrayBuffer());
+      const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+      if(isPdf){
+        const doc = await PDFLib.PDFDocument.load(buf, {ignoreEncryption:true, throwOnInvalidObject:false});
+        const pj = await pdfjsLib.getDocument({data: buf.slice(), stopAtErrors:false}).promise;
+        const di = pe.extra.push({ kind:'pdf', doc, name:f.name }) - 1;
+        for(let i=1;i<=pj.numPages;i++){
+          const canvas = await _peThumbFromPdfPage(pj, i);
+          const uid = ++pe.uidSeq; pe.items.push({ uid, seq: uid, src:'add', extra: di, idx: i-1, canvas, name: f.name });
+        }
+      } else if(/^image\/(jpeg|png)$/i.test(f.type)){
+        const url = URL.createObjectURL(f);
+        const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('画像を読み込めません')); im.src = url; });
+        const k = 220 / img.naturalWidth; const canvas = document.createElement('canvas');
+        canvas.width = 220; canvas.height = Math.round(img.naturalHeight * k);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        const di = pe.extra.push({ kind:'img', bytes: buf, png: /png/i.test(f.type), name:f.name }) - 1;
+        const uid = ++pe.uidSeq; pe.items.push({ uid, seq: uid, src:'add', extra: di, idx: 0, canvas, name: f.name });
+      } else {
+        alert(`「${f.name}」はPDFまたは画像（JPG/PNG）ではないため追加できません`);
+      }
+    }
+    _peRender();
+    const bodyEl = document.getElementById('pageEditorBody'); bodyEl.scrollTop = bodyEl.scrollHeight;
+  }catch(e){
+    console.error('ページ追加に失敗:', e);
+    alert('ページの追加に失敗しました: ' + e.message);
+    _peUpdateFooter();
   }
 }
 
 async function savePagesEditor(){
-  if(!_pageEditor || _pageEditor.markedPages.size === 0) return;
-  const { id, filename, bytes, pageCount, markedPages } = _pageEditor;
-  if(markedPages.size >= pageCount){
-    alert('全ページは削除できません');
-    return;
-  }
-  if(!confirm(`${markedPages.size}ページを削除します。\n（削除したページはホームの「ゴミ箱」に入り、あとから元に戻せます）`)) return;
+  const pe = _pageEditor; if(!pe) return;
+  const { id, filename, bytes, srcDoc, pageCount, items, marked, extra } = pe;
+  const kept = items.filter(it => !marked.has(it.uid));
+  if(kept.length === 0){ alert('全ページは削除できません'); return; }
+  const delItems = items.filter(it => it.src==='orig' && marked.has(it.uid));
+  const addCount = kept.filter(it => it.src==='add').length;
+  let ordChanged = false, last = -1; for(const it of kept){ if(it.seq < last){ ordChanged = true; break; } last = it.seq; }
+  if(delItems.length === 0 && addCount === 0 && !ordChanged) return;
+  const msg = [];
+  if(delItems.length) msg.push(`${delItems.length}ページを削除（ホームの「ゴミ箱」に入り、あとから元に戻せます）`);
+  if(addCount) msg.push(`${addCount}ページを追加`);
+  if(ordChanged) msg.push('ページの順番を変更');
+  if(!confirm(`次の内容で保存します。\n\n・${msg.join('\n・')}\n\nよろしいですか？`)) return;
 
   const saveBtn = document.getElementById('pageEditorSaveBtn');
   saveBtn.disabled = true;
-  saveBtn.textContent = '削除中...';
+  saveBtn.textContent = '保存中...';
 
   try{
-    const srcDoc = await PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true, throwOnInvalidObject:false});
-    // 残すページ番号（1始まり）を決定し、新しいPDFを作成
-    const keepIndexes = [];
-    for(let i=0;i<pageCount;i++){
-      if(!markedPages.has(i+1)) keepIndexes.push(i);
-    }
+    // 画面に並んでいる順に、新しいPDFを組み立てる
     const newDoc = await PDFLib.PDFDocument.create();
-    const copiedPages = await newDoc.copyPages(srcDoc, keepIndexes);
-    copiedPages.forEach(p => newDoc.addPage(p));
-    const out = await newDoc.save();
-    const outBytes = new Uint8Array(out);
+    for(const it of kept){
+      if(it.src === 'orig'){
+        const [p] = await newDoc.copyPages(srcDoc, [it.idx]); newDoc.addPage(p);
+      } else {
+        const ex = extra[it.extra];
+        if(ex.kind === 'pdf'){ const [p] = await newDoc.copyPages(ex.doc, [it.idx]); newDoc.addPage(p); }
+        else {
+          const im = ex.png ? await newDoc.embedPng(ex.bytes) : await newDoc.embedJpg(ex.bytes);
+          // A4に収まるよう縮小して中央に配置
+          const W = 595.28, H = 841.89, k = Math.min(W / im.width, H / im.height, 1);
+          const pg = newDoc.addPage([W, H]);
+          pg.drawImage(im, { x:(W - im.width*k)/2, y:(H - im.height*k)/2, width: im.width*k, height: im.height*k });
+        }
+      }
+    }
+    const outBytes = new Uint8Array(await newDoc.save());
 
     // ── 削除するページを先に「ゴミ箱」へ保存（保存できなければ削除しない） ──
-    const delIndexes = []; for(let i=0;i<pageCount;i++){ if(markedPages.has(i+1)) delIndexes.push(i); }
-    const trashDoc = await PDFLib.PDFDocument.create();
-    (await trashDoc.copyPages(srcDoc, delIndexes)).forEach(pg => trashDoc.addPage(pg));
-    const trashBytes = new Uint8Array(await trashDoc.save());
-    {
+    if(delItems.length){
+      const delIndexes = delItems.map(it => it.idx).sort((a,b)=>a-b);
+      const trashDoc = await PDFLib.PDFDocument.create();
+      (await trashDoc.copyPages(srcDoc, delIndexes)).forEach(pg => trashDoc.addPage(pg));
+      const trashBytes = new Uint8Array(await trashDoc.save());
       const dbT = await getFirestore();
       const tRef = dbT.collection('vouchers').doc();
       const tB64 = uint8ToBase64(trashBytes);
@@ -5233,18 +5329,24 @@ async function savePagesEditor(){
     } else {
       fields = { pdfBase64: newPdfBase64, pdfChunkCount: FV.delete(), checksum: newChecksum };
     }
-    // 結合ファイルの場合：「元に戻す」用の記録も、削除したページ分を反映する
+    // 結合ファイルの場合：「元に戻す」用の記録も、削除・追加・順番変更を反映する
     try{
       const curDoc = await db.collection('vouchers').doc(id).get();
       const mp = curDoc.exists ? curDoc.data().mergeParts : null;
       if(Array.isArray(mp) && mp.reduce((a,x)=>a+(x.pages||0),0) === pageCount){
-        let at = 0; const np = [];
-        for(const x of mp){
-          let cnt = 0; for(let q=at+1;q<=at+x.pages;q++){ if(!markedPages.has(q)) cnt++; }
-          at += x.pages;
-          if(cnt > 0) np.push({ ...x, pages: cnt });
+        const partOf = []; mp.forEach((x,pi) => { for(let q=0;q<(x.pages||0);q++) partOf.push(pi); });
+        const runs = []; let ok = true; const seen = new Set();
+        for(const it of kept){
+          const key = it.src==='orig' ? 'p'+partOf[it.idx] : 'a'+it.extra;
+          const lastRun = runs[runs.length-1];
+          if(lastRun && lastRun.key === key){ lastRun.pages++; continue; }
+          if(seen.has(key)){ ok = false; break; }   // 同じ元ファイルのページが離れて並ぶと、元に戻す記録は表せない
+          seen.add(key);
+          if(it.src==='orig') runs.push({ key, pages:1, base: mp[partOf[it.idx]] });
+          else runs.push({ key, pages:1, base: { filename: it.name || '追加ページ', type:'upload', savedAt: new Date().toISOString(), dateOnly:false, confirmed:false } });
         }
-        fields.mergeParts = np;
+        if(ok){ fields.mergeParts = runs.map(r => ({ ...r.base, pages: r.pages })); }
+        else { fields.mergeParts = FV.delete(); }
       }
     }catch(e){ console.warn('mergeParts更新失敗（無視）:', e); }
     await db.collection('vouchers').doc(id).update(fields);
@@ -5258,15 +5360,15 @@ async function savePagesEditor(){
     if(newFl !== null){ await db.collection('vouchers').doc(id).update({ isVM: newFl.vm, ranks: newFl.ranks }); }
     await _patchVoucherIndexFields(id, { checksum: newChecksum, chunks: newChunks, isVM: newFl ? newFl.vm : null, ranks: newFl ? newFl.ranks : null });
 
-    alert(`${markedPages.size}ページをゴミ箱に移動しました（残り${pageCount - markedPages.size}ページ）`);
+    alert(`保存しました（${msg.join('、')}／現在${kept.length}ページ）`);
     closePagesEditor();
     closePdfPreview();
     await renderArchive();
   }catch(e){
-    console.error('ページ削除に失敗:', e);
-    alert('ページの削除に失敗しました: ' + e.message);
-    saveBtn.disabled = false;
-    saveBtn.textContent = '選択したページを削除';
+    console.error('ページ編集の保存に失敗:', e);
+    alert('ページ編集の保存に失敗しました: ' + e.message);
+    saveBtn.textContent = '変更を保存';
+    _peUpdateFooter();
   }
 }
 
@@ -5274,7 +5376,7 @@ function closePagesEditor(){
   document.getElementById('pageEditorOverlay').classList.remove('open');
   document.getElementById('pageEditorBody').innerHTML = '';
   document.getElementById('pageEditorSaveBtn').disabled = true;
-  document.getElementById('pageEditorSaveBtn').textContent = '選択したページを削除';
+  document.getElementById('pageEditorSaveBtn').textContent = '変更を保存';
   _pageEditor = null;
 }
 
@@ -5669,7 +5771,7 @@ refreshPendingBanner();
 <div id="pdfPreviewOverlay">
   <div id="pdfPreviewHeader">
     <div id="pdfPreviewTitle"></div>
-    <button id="pdfPreviewEditBtn" onclick="openPagesEditor()" style="display:none;">🗑 ページ編集</button>
+    <button id="pdfPreviewEditBtn" onclick="openPagesEditor()" style="display:none;">✏️ ページ編集</button>
     <button id="pdfPreviewMoveBtn" onclick="movePreviewToMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">📁 結合ファイルへ移動</button>
     <button id="pdfPreviewUnmergeBtn" onclick="unmergeArchiveItem()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">↩ 元に戻す</button>
     <button id="pdfPreviewDlBtn" onclick="pdfPreviewDownload()">⬇ DL</button>
@@ -5681,13 +5783,15 @@ refreshPendingBanner();
 <!-- ページ編集モーダル（複数ページのPDFから不要なページだけを削除） -->
 <div id="pageEditorOverlay">
   <div id="pageEditorHeader">
-    <div id="pageEditorTitle">ページを選んで削除</div>
+    <div id="pageEditorTitle">ページ編集</div>
+    <button id="pageEditorAddBtn" onclick="document.getElementById('pageEditorAddInput').click()">＋ ページを追加</button>
+    <input type="file" id="pageEditorAddInput" accept="application/pdf,image/jpeg,image/png" multiple style="display:none" onchange="peAddFiles(event)">
     <button id="pageEditorCloseBtn" onclick="closePagesEditor()">✕</button>
   </div>
   <div id="pageEditorBody"></div>
   <div id="pageEditorFooter">
-    <div id="pageEditorFooterText">削除したいページをタップして選択してください</div>
-    <button id="pageEditorSaveBtn" onclick="savePagesEditor()" disabled>選択したページを削除</button>
+    <div id="pageEditorFooterText">タップ＝削除する／戻す、◀ ▶＝順番を移動、「＋ ページを追加」＝PDF・画像を追加</div>
+    <button id="pageEditorSaveBtn" onclick="savePagesEditor()" disabled>変更を保存</button>
   </div>
 </div>
 
