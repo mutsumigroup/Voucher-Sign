@@ -336,6 +336,8 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 .archive-ship-cat.embark{background:#fee2e2;color:#b91c1c;}
 .archive-ship-cat.disembark{background:#dbeafe;color:#1d4ed8;}
 .archive-ship-cat.vm{background:#fef3c7;color:#b45309;}
+.archive-ship-cat.vm_embark{background:#ffedd5;color:#c2410c;border-color:#fdba74;}
+.archive-ship-cat.vm_disembark{background:#e0f2fe;color:#0369a1;border-color:#7dd3fc;}
 .archive-ship-cat.other{background:#f1f5f9;color:#475569;}
 .archive-ship-cat.active{border-color:#2563eb;box-shadow:0 0 0 1.5px #bfdbfe;}
 .archive-empty{text-align:center;padding:40px 20px;color:#94a3b8;}
@@ -540,11 +542,22 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.34</span>
+          <span class="version-current">v4.35</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.35</span>
+            <span class="ver-date">2026/11/23</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>VM（ヴィッセルマネージャー）のフィルターを「VM乗船」「VM下船」に分割</li>
+            <li>VMの書類は通常の乗船・下船には数えず、それぞれVM乗船／VM下船として集計</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.34</span>
@@ -3157,9 +3170,11 @@ async function _detectVM(bytes){
   }
 }
 
-// 一覧用の区分：PDFにVM記載があれば 'vm'、なければファイル名から 乗船/下船/他
+// 一覧用の区分：PDFにVM記載があれば 'vm_embark'(VM乗船)/'vm_disembark'(VM下船)/'vm'(区分不明のVM)、なければファイル名から 乗船/下船/他
 function _recCat(r){
-  return r.isVM ? 'vm' : extractCategory(r.filename);
+  const base = extractCategory(r.filename);
+  if(!r.isVM) return base;
+  return base === 'embark' ? 'vm_embark' : base === 'disembark' ? 'vm_disembark' : 'vm';
 }
 
 async function saveToArchive(pdfBytes, filename, type, customDate, opts){
@@ -3795,6 +3810,7 @@ async function _registerPendingFiles(files, sourceId){
 // アプリ起動時に保留バナーを更新
 document.addEventListener('DOMContentLoaded', ()=>{ refreshPendingBanner(); });
 
+function _catTotal(c){ return c.embark + c.disembark + c.other + c.vm + c.vm_embark + c.vm_disembark; }
 let _archiveShipFilter = null; // null なら全件表示。それ以外は {ship, category} （categoryは 'embark'|'disembark'|'other'|null）
 
 // 現在のフィルター（船名別件数の絞り込み）を records に適用する共通処理
@@ -4146,7 +4162,7 @@ async function renderArchive(){
     const ship = extractShipName(r.filename);
     const cat = _recCat(r);
     const m = byMonthShip.get(monthKey);
-    if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0, vm:0});
+    if(!m.has(ship)) m.set(ship, {embark:0, disembark:0, other:0, vm:0, vm_embark:0, vm_disembark:0});
     m.get(ship)[cat]++;
   }
   const sortedMonthKeys = [...byMonthShip.keys()].sort((a,b)=>{
@@ -4161,11 +4177,11 @@ async function renderArchive(){
   shipBody.innerHTML = sortedMonthKeys.map(monthKey => {
     const shipMap = byMonthShip.get(monthKey);
     const sortedShips = [...shipMap.entries()].sort((a,b)=>{
-      const ta = a[1].embark + a[1].disembark + a[1].other + a[1].vm;
-      const tb = b[1].embark + b[1].disembark + b[1].other + b[1].vm;
+      const ta = _catTotal(a[1]);
+      const tb = _catTotal(b[1]);
       return tb - ta;
     });
-    const totalInMonth = sortedShips.reduce((s,[,c])=>s + c.embark + c.disembark + c.other + c.vm, 0);
+    const totalInMonth = sortedShips.reduce((s,[,c])=>s + _catTotal(c), 0);
     return `
       <div class="archive-ship-month-label">${escHtml(monthKey)}（${totalInMonth}件）</div>
       <div class="archive-ship-rows">
@@ -4175,6 +4191,8 @@ async function renderArchive(){
           const tags = [];
           if(c.embark>0) tags.push(`<span class="archive-ship-cat embark${isActive('embark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','embark')">乗船 ${c.embark}件</span>`);
           if(c.disembark>0) tags.push(`<span class="archive-ship-cat disembark${isActive('disembark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','disembark')">下船 ${c.disembark}件</span>`);
+          if(c.vm_embark>0) tags.push(`<span class="archive-ship-cat vm_embark${isActive('vm_embark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm_embark')">VM乗船 ${c.vm_embark}件</span>`);
+          if(c.vm_disembark>0) tags.push(`<span class="archive-ship-cat vm_disembark${isActive('vm_disembark')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm_disembark')">VM下船 ${c.vm_disembark}件</span>`);
           if(c.vm>0) tags.push(`<span class="archive-ship-cat vm${isActive('vm')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','vm')">VM ${c.vm}件</span>`);
           if(c.other>0) tags.push(`<span class="archive-ship-cat other${isActive('other')?' active':''}" onclick="filterByShipCategory('${escHtml(ship)}','other')">他 ${c.other}件</span>`);
           return `
