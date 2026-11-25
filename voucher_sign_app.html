@@ -601,11 +601,21 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.55</span>
+          <span class="version-current">v4.56</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.56</span>
+            <span class="ver-date">2026/11/25</span>
+            <span class="ver-tag new">New</span>
+          </div>
+          <ul class="ver-changes">
+            <li>プレビューの「📅 日付を入力」で、Voucher右上の「Date:」の日付を入力・編集できるように（空欄なら入力、すでに入っていれば書き換え、「日付を消す」も可。結合ファイルは対象のバウチャーを選択）。署名済み一覧・結合ファイル共通</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.55</span>
@@ -5132,6 +5142,7 @@ function _openPdfPreviewFromBytes(bytes, filename){
     const umBtn = document.getElementById('pdfPreviewUnmergeBtn'); if(umBtn) umBtn.style.display = 'none';
     const rcBtn0 = document.getElementById('pdfPreviewReceiptBtn'); if(rcBtn0) rcBtn0.style.display = 'none';
     const rcUn0 = document.getElementById('pdfPreviewReceiptUndoBtn'); if(rcUn0) rcUn0.style.display = 'none';
+    const dtBtn0 = document.getElementById('pdfPreviewDateBtn'); if(dtBtn0) dtBtn0.style.display = _previewArchiveId ? 'inline-block' : 'none';
     const mvBtn = document.getElementById('pdfPreviewMoveBtn'); if(mvBtn) mvBtn.style.display = 'none';
     const body = document.getElementById('pdfPreviewBody');
     body.innerHTML = '';
@@ -5487,12 +5498,12 @@ function closePagesEditor(){
    そのページの空きスペースに領収書を貼って、同じ結合ファイルに上書き保存する
 ══════════════════════════════════════════ */
 // 貼り付け先のページ（サムネイル）を選ぶ。選んだページ番号（0始まり）を返す。キャンセルは null
-function _receiptPickPage(pdfBytes, fileName){
+function _receiptPickPage(pdfBytes, fileName, title){
   return new Promise(async resolve => {
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.88);display:flex;flex-direction:column;';
     ov.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#1e1b4b;">
-        <div style="flex:1;color:#fff;font-size:13px;font-weight:700;">🧾 領収書（${escHtml(fileName)}）を貼るバウチャーをタップ</div>
+        <div style="flex:1;color:#fff;font-size:13px;font-weight:700;">${title ? escHtml(title) : '🧾 領収書（' + escHtml(fileName) + '）を貼るバウチャーをタップ'}</div>
         <button id="rcPickClose" style="padding:6px 12px;border-radius:8px;border:none;background:rgba(255,255,255,.15);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">✕</button></div>
       <div id="rcPickGrid" style="flex:1;overflow-y:auto;background:#0f172a;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;align-content:start;">
         <div style="color:#94a3b8;font-size:13px;padding:20px;grid-column:1/-1;text-align:center;">読み込み中...</div></div>`;
@@ -5647,6 +5658,115 @@ async function undoReceiptOnMerged(id){
   }catch(e){
     console.error('領収書を剥がす処理に失敗:', e);
     alert('領収書を剥がせませんでした: ' + e.message);
+  }
+}
+
+/* ══════════════════════════════════════════
+   Voucher右上の「Date:」を入力・編集する
+══════════════════════════════════════════ */
+const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// 指定ページの「Date:」の位置と、すでに書かれている日付を探す
+async function _findDateSpot(pdfBytes, pageIdx){
+  const pj = await pdfjsLib.getDocument({data: pdfBytes.slice(), stopAtErrors:false}).promise;
+  const pg = await pj.getPage(pageIdx + 1);
+  const content = await pg.getTextContent();
+  const items = content.items.filter(it => it.str && it.str.trim()).map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: Math.abs(it.width), h: Math.abs(it.height) || 9 }));
+  // いちばん上にある「Date」を探す
+  const labels = items.filter(it => /^\s*Date\s*:?/i.test(it.str)).sort((a,b) => b.y - a.y);
+  if(!labels.length) return null;
+  const lb = labels[0];
+  let existing = [];
+  const m = lb.str.match(/^(\s*Date\s*:?)\s*(\S.*)$/i);
+  let labelEnd = lb.x + lb.w;
+  if(m){   // 「Date: 2026/Nov/24」が1つの文字列になっている場合
+    const cw = lb.w / lb.str.length; labelEnd = lb.x + cw * m[1].length;
+    existing.push({ str: m[2], x: labelEnd, y: lb.y, w: lb.w - cw * m[1].length, h: lb.h });
+  }
+  // 「Date」と「:」が別々の文字列になっている様式があるため、コロンだけの文字列はラベルの一部として扱う
+  const sameLine = items.filter(it => it !== lb && Math.abs(it.y - lb.y) <= 4 && it.x >= labelEnd - 1).sort((a,b) => a.x - b.x);
+  for(const it of sameLine){
+    if(/^\s*:\s*$/.test(it.str)){ labelEnd = Math.max(labelEnd, it.x + it.w); continue; }
+    existing.push(it);
+  }
+  const txt = existing.map(e => e.str).join(' ').replace(/^\s*:\s*/, '');
+  let parsed = null;
+  const dm = txt.match(/(\d{4})\s*\/\s*([A-Za-z]{3})\s*\/\s*(\d{1,2})/);
+  if(dm){ const mi = _MON.findIndex(x => x.toLowerCase() === dm[2].toLowerCase()); if(mi >= 0) parsed = `${dm[1]}-${String(mi+1).padStart(2,'0')}-${String(+dm[3]).padStart(2,'0')}`; }
+  return { label: lb, labelEnd, existing, text: txt, parsed };
+}
+
+// 日付の入力ダイアログ。{date:'YYYY-MM-DD'} / {clear:true} / null(キャンセル)
+function _dateEditDialog(spot, pageNo){
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    const today = new Date(); const td = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:22px 20px;width:100%;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.25);box-sizing:border-box;">
+      <div style="font-size:15px;font-weight:800;color:#1e1b4b;margin-bottom:4px;">📅 Voucherの日付を入力・編集</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:14px;">${pageNo}ページ目の右上「Date:」${spot.text ? '／現在：' + escHtml(spot.text) : '／現在：空欄'}</div>
+      <input type="date" id="vdInput" value="${spot.parsed || td}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;color:#1e1b4b;background:#fff;margin-bottom:16px;display:block;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button data-a="cancel" style="flex:1;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;">キャンセル</button>
+        <button data-a="ok" style="flex:1;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:700;">反映する</button>
+      </div>
+      ${spot.text ? '<button data-a="clear" style="width:100%;padding:10px;border-radius:10px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;font-size:13px;font-weight:700;">日付を消して空欄にする</button>' : ''}
+    </div>`;
+    ov.addEventListener('click', e => {
+      const b = e.target.closest('[data-a]'); if(!b) return;
+      const a = b.dataset.a;
+      if(a === 'ok'){ const v = ov.querySelector('#vdInput').value; if(!v){ alert('日付を入力してください'); return; } ov.remove(); resolve({ date: v }); }
+      else if(a === 'clear'){ ov.remove(); resolve({ clear: true }); }
+      else { ov.remove(); resolve(null); }
+    });
+    document.body.appendChild(ov);
+  });
+}
+
+async function editVoucherDate(id){
+  id = id || _previewArchiveId; if(!id) return;
+  try{
+    const r = await getArchiveById(id);
+    if(!r || (!r.pdfBase64 && !r.pdfBytes)){ alert('PDFデータが見つかりませんでした'); return; }
+    const bytes = r.pdfBase64 ? base64ToUint8(r.pdfBase64) : r.pdfBytes;
+    const doc = await PDFLib.PDFDocument.load(bytes, {throwOnInvalidObject:false, updateMetadata:false, ignoreEncryption:true});
+    const n = doc.getPageCount();
+    let target = 0;
+    if(n > 1){ target = await _receiptPickPage(bytes, r.filename, '📅 日付を入力・編集するバウチャーをタップ'); if(target === null) return; }
+    const spot = await _findDateSpot(bytes, target);
+    if(!spot){ alert(`${target+1}ページ目に「Date:」の欄が見つかりませんでした。\n（Voucherの様式以外のページです）`); return; }
+    const res = await _dateEditDialog(spot, target + 1);
+    if(!res) return;
+
+    const page = doc.getPages()[target];
+    // 今ある日付を白で塗りつぶす
+    for(const e of spot.existing){
+      page.drawRectangle({ x: e.x - 2, y: e.y - 1.5, width: e.w + 4, height: (e.h || 9) + 2.5, color: PDFLib.rgb(1,1,1), borderWidth: 0 });
+    }
+    if(res.date){
+      const [yy, mm, dd] = res.date.split('-');
+      const text = `${yy}/${_MON[+mm - 1]}/${dd}`;
+      const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+      const size = Math.min(12, Math.max(8, (spot.existing[0] && spot.existing[0].h) || spot.label.h || 9));
+      // 既存の日付があればその右端、なければ「Date:」の線の右端にそろえる
+      const ex = spot.existing;
+      const endX = ex.length ? Math.max(...ex.map(e => e.x + e.w)) : spot.label.x + spot.label.w * 5.15;   // 様式の大きさ（A4・大判）に合わせて、線の右端の位置を換算
+      const y = ex.length ? ex[0].y : spot.label.y;
+      const tw = font.widthOfTextAtSize(text, size);
+      const pw = page.getWidth();
+      let sx = endX - tw;
+      const minX = (spot.labelEnd || (spot.label.x + spot.label.w)) + 4;   // 「Date:」の文字に重ならないようにする
+      if(sx < minX) sx = minX;
+      if(sx + tw > pw - 8) sx = Math.max(minX, pw - 8 - tw);              // ページの右端からはみ出さないようにする
+      page.drawText(text, { x: sx, y, size, font, color: PDFLib.rgb(0,0,0) });
+    }
+    const outBytes = new Uint8Array(await doc.save());
+    await _saveBytesInPlace(id, outBytes, n, null);
+    await _refreshKeepState(id);
+    alert(res.date ? `${target+1}ページ目の日付を ${res.date.replace(/-/g,'/')} に更新しました` : `${target+1}ページ目の日付を消しました`);
+  }catch(e){
+    console.error('日付の編集に失敗:', e);
+    alert('日付を編集できませんでした: ' + e.message);
   }
 }
 
@@ -6145,6 +6265,7 @@ refreshPendingBanner();
     <button id="pdfPreviewMoveBtn" onclick="movePreviewToMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">📁 結合ファイルへ移動</button>
     <button id="pdfPreviewReceiptBtn" onclick="attachReceiptToMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">🧾 領収書を添付</button>
     <button id="pdfPreviewReceiptUndoBtn" onclick="undoReceiptOnMerged()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#92400e;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">🧾 領収書を剥がす</button>
+    <button id="pdfPreviewDateBtn" onclick="editVoucherDate()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#0369a1;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">📅 日付を入力</button>
     <button id="pdfPreviewUnmergeBtn" onclick="unmergeArchiveItem()" style="display:none;padding:6px 12px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">↩ 元に戻す</button>
     <button id="pdfPreviewDlBtn" onclick="pdfPreviewDownload()">⬇ DL</button>
     <button id="pdfPreviewCloseBtn" onclick="closePdfPreview()">✕</button>
