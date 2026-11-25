@@ -289,6 +289,13 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
 #pdfPreviewTitle{color:#fff;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
 #pdfPreviewDlBtn{padding:6px 14px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewHeader button{white-space:nowrap;}
+/* スマホ：ボタンが多くて右端（✕）が画面外に出ないよう、1段目＝ファイル名＋✕、2段目＝操作ボタン（入りきらなければ折り返し） */
+@media (max-width:999px){
+  #pdfPreviewHeader{flex-wrap:wrap;row-gap:8px;}
+  #pdfPreviewTitle{order:0;flex:1 0 calc(100% - 62px);min-width:0;}
+  #pdfPreviewCloseBtn{order:1;}
+  #pdfPreviewHeader > button:not(#pdfPreviewCloseBtn){order:2;padding:6px 10px !important;font-size:12px !important;}
+}
 #pdfPreviewEditBtn{padding:6px 12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewCloseBtn{padding:6px 12px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0;}
 #pdfPreviewBody{flex:1;overflow:hidden;display:flex;align-items:stretch;}
@@ -594,11 +601,21 @@ button,[onclick],label,.mode-btn,.archive-btn,.crew-card,.dlc-btn,.upload-box,.r
       <div class="version-header" onclick="toggleVersion()">
         <div class="version-header-left">
           <span class="version-title">&#128221; バージョン履歴</span>
-          <span class="version-current">v4.54</span>
+          <span class="version-current">v4.55</span>
         </div>
         <span class="version-arrow" id="versionArrow">&#9660;</span>
       </div>
       <div class="version-body" id="versionBody">
+        <div class="version-item">
+          <div class="version-item-header">
+            <span class="ver-num">v4.55</span>
+            <span class="ver-date">2026/11/25</span>
+            <span class="ver-tag fix">Fix</span>
+          </div>
+          <ul class="ver-changes">
+            <li>修正：スマホでPDFプレビュー上部のボタンが増えて、右端の✕（閉じる）が画面外に消えていた不具合を修正（1段目＝ファイル名と✕、2段目＝操作ボタンに分けて表示）</li>
+          </ul>
+        </div>
         <div class="version-item">
           <div class="version-item-header">
             <span class="ver-num">v4.54</span>
